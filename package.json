@@ -1,0 +1,58 @@
+{
+  "name": "retail-app",
+  "version": "1.0.0",
+  "description": "Offline Multi-Brand Mobile & Home Appliances Retail POS & ERP",
+  "main": "electron/main.js",
+  "scripts": {
+    "install:all": "npm install && npm run install:backend && npm run install:frontend",
+    "install:backend": "cd backend && npm install",
+    "install:frontend": "cd frontend && npm install",
+    "start": "electron .",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:electron": "cross-env NODE_ENV=development electron .",
+    "dev": "concurrently --kill-others \"npm run dev:frontend\" \"npm run dev:electron\"",
+    "build:frontend": "cd frontend && npm run build",
+    "package:win": "npm run build:frontend && electron-builder --win"
+  },
+  "keywords": [
+    "pos",
+    "retail",
+    "offline-first",
+    "electron",
+    "react",
+    "mongodb",
+    "express"
+  ],
+  "author": "Antigravity",
+  "license": "ISC",
+  "dependencies": {},
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^29.1.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.retail.app",
+    "productName": "RetailPOS",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "files": [
+      "electron/**/*",
+      "backend/**/*",
+      "frontend/dist/**/*"
+    ]
+  }
+}

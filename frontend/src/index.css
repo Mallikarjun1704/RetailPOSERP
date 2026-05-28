@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body {
+    @apply h-full select-none; /* Prevent accidental text dragging in a desktop POS */
+  }
+
+  /* Premium scrollbars for POS views */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-slate-100 dark:bg-slate-900;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 dark:bg-slate-700 rounded-full hover:bg-brand-500 transition-colors;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border border-slate-200/80 dark:border-slate-800/80 shadow-glass dark:shadow-glass-dark;
+  }
+  
+  .pos-grid-header {
+    @apply bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold uppercase tracking-wider text-xs px-4 py-3;
+  }
+
+  .pos-grid-row {
+    @apply border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors duration-150;
+  }
+
+  /* Rapid pulse indicator for stock warnings */
+  .stock-pulse {
+    @apply relative flex h-2.5 w-2.5;
+  }
+  .stock-pulse-dot {
+    @apply animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75;
+  }
+  .stock-pulse-core {
+    @apply relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500;
+  }
+}
+
+/* Hide print layout standard margins & page markings */
+@media print {
+  body {
+    visibility: hidden;
+  }
+  #print-area {
+    visibility: visible;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm; /* Force 80mm roll sizing */
+  }
+}
