@@ -71,9 +71,11 @@ This builds:
 ---
 npm run electron:build -> runs backend and frontend dev servers. .exe
 npm run electron:start -> runs both dev server and front-end dev server together .
-npm run package:win ->uses electron-builder to create installer.
+npm run package:win ->uses electron-builder to create installer. -> This commmad is enaugh to get desktop app.  -> use this only in production . 
+  -> Don't use npm run electron:build -> This will not create installer.
+  -> Don't use npm run dev -> This will not create installer.
 
-## ⌨️ POS Billing Keyboard Navigation Shortcuts
+⌨️ POS Billing Keyboard Navigation Shortcuts
 
 To maximize cashier checkout efficiency, the terminal is built to respond immediately to keyboard focus commands:
 - **Scan Barcodes**: Simply direct your barcode scanner to the product search input. Barcode registers automatically, matching active SKU indexes, and appends the item to the cart.
