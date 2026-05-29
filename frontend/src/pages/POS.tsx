@@ -35,10 +35,9 @@ const POS: React.FC = () => {
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const [customerFound, setCustomerFound] = useState(false);
 
-  // Coupon state
+  // Coupon state — now supports multiple coupons
   const [couponCode, setCouponCode] = useState('');
-  const [couponDiscount, setCouponDiscount] = useState(0);
-  const [appliedCouponDetails, setAppliedCouponDetails] = useState<any>(null);
+  const [appliedCoupons, setAppliedCoupons] = useState<{ code: string; discountType: string; discountValue: number; discountAmount: number }[]>([]);
   const [couponError, setCouponError] = useState('');
 
   // Payment State
@@ -166,13 +165,15 @@ const POS: React.FC = () => {
     const updated = [...cart];
     updated.splice(index, 1);
     setCart(updated);
-    // Recalculate coupons if deleted items affected scopes
-    if (appliedCouponDetails) {
-      removeCoupon();
+    // Clear all coupons if cart changes, so user can re-validate
+    if (appliedCoupons.length > 0) {
+      removeAllCoupons();
     }
   };
 
   // 7. Calculate calculations
+  const totalCouponDiscount = appliedCoupons.reduce((sum, c) => sum + c.discountAmount, 0);
+
   const calculateTotals = () => {
     let subtotal = 0; // Taxable values total
     let gstTotal = 0;
@@ -189,7 +190,7 @@ const POS: React.FC = () => {
       itemDiscounts += item.discount * item.quantity;
     });
 
-    const couponDeduction = couponDiscount;
+    const couponDeduction = totalCouponDiscount;
     const finalAmount = Math.max(0, subtotal + gstTotal - couponDeduction - extraDiscount);
 
     return {
@@ -202,10 +203,17 @@ const POS: React.FC = () => {
 
   const totals = calculateTotals();
 
-  // 8. Validate Coupon
+  // 8. Validate Coupon — supports adding multiple coupons
   const applyCoupon = async () => {
     if (!couponCode) return;
     setCouponError('');
+
+    // Prevent duplicate coupon codes
+    if (appliedCoupons.some(c => c.code === couponCode.toUpperCase())) {
+      setCouponError('This coupon is already applied.');
+      return;
+    }
+
     try {
       const { data } = await api.post('/coupons/validate', {
         code: couponCode,
@@ -219,20 +227,29 @@ const POS: React.FC = () => {
       });
 
       if (data.success) {
-        setCouponDiscount(data.data.discountAmount);
-        setAppliedCouponDetails(data.data);
+        setAppliedCoupons(prev => [...prev, {
+          code: data.data.code,
+          discountType: data.data.discountType,
+          discountValue: data.data.discountValue,
+          discountAmount: data.data.discountAmount
+        }]);
+        setCouponCode(''); // Clear input so user can type another coupon
       }
     } catch (err: any) {
       setCouponError(err.response?.data?.message || 'Invalid Coupon Code');
-      setCouponDiscount(0);
-      setAppliedCouponDetails(null);
     }
   };
 
-  const removeCoupon = () => {
+  // Remove a single coupon by code
+  const removeSingleCoupon = (code: string) => {
+    setAppliedCoupons(prev => prev.filter(c => c.code !== code));
+    setCouponError('');
+  };
+
+  // Remove all coupons
+  const removeAllCoupons = () => {
     setCouponCode('');
-    setCouponDiscount(0);
-    setAppliedCouponDetails(null);
+    setAppliedCoupons([]);
     setCouponError('');
   };
 
@@ -257,6 +274,9 @@ const POS: React.FC = () => {
     }
 
     try {
+      const allCouponCodes = appliedCoupons.map(c => c.code).join(', ');
+      const perItemCouponDiscount = appliedCoupons.length > 0 ? (totalCouponDiscount / cart.length) : 0;
+
       const checkoutPayload = {
         customerMobile,
         customerName,
@@ -269,8 +289,8 @@ const POS: React.FC = () => {
           product: item.product,
           quantity: item.quantity,
           sellingPrice: item.sellingPrice,
-          discount: item.discount + (appliedCouponDetails ? (couponDiscount / cart.length) : 0), // split coupon discount mathematically
-          couponCode: appliedCouponDetails ? appliedCouponDetails.code : '',
+          discount: item.discount + perItemCouponDiscount, // split total coupon discount across all cart items
+          couponCode: allCouponCodes,
           imei: item.imei || ''
         }))
       };
@@ -300,7 +320,7 @@ const POS: React.FC = () => {
     setCustomerAddress('');
     setLoyaltyPoints(0);
     setCustomerFound(false);
-    removeCoupon();
+    removeAllCoupons();
     setPaymentMethod('Cash');
     setPaymentDetails('');
     setExtraDiscount(0);
@@ -527,43 +547,72 @@ const POS: React.FC = () => {
             </div>
           </div>
 
-          {/* 2. Coupons & Pricing offers */}
+          {/* 2. Coupons & Pricing offers — Multiple Coupons */}
           <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/50 dark:border-slate-800/80 rounded-2xl">
             <div className="flex items-center gap-2 mb-3.5">
               <Tag size={16} className="text-accent-500" />
               <h3 className="font-extrabold text-sm text-slate-800 dark:text-slate-200 uppercase tracking-wider">Coupon Offers</h3>
             </div>
 
+            {/* Input + Apply button — always enabled for additional coupons */}
             <div className="flex gap-2">
               <input
                 type="text"
-                placeholder="Apply coupon code"
+                placeholder={appliedCoupons.length > 0 ? "Add another coupon..." : "Apply coupon code"}
                 value={couponCode}
                 onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                disabled={!!appliedCouponDetails}
+                onKeyDown={(e) => { if (e.key === 'Enter') applyCoupon(); }}
                 className="flex-1 px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:border-accent-500 text-slate-900 dark:text-white font-bold tracking-widest"
               />
-              {appliedCouponDetails ? (
-                <button 
-                  onClick={removeCoupon}
-                  className="px-3 bg-rose-500 hover:bg-rose-600 rounded-xl text-xs text-white font-bold transition-colors"
-                >
-                  Remove
-                </button>
-              ) : (
-                <button 
-                  onClick={applyCoupon}
-                  className="px-4 bg-accent-600 hover:bg-accent-500 rounded-xl text-xs text-white font-bold transition-colors"
-                >
-                  Apply
-                </button>
-              )}
+              <button 
+                onClick={applyCoupon}
+                disabled={!couponCode}
+                className="px-4 bg-accent-600 hover:bg-accent-500 disabled:bg-slate-300 disabled:dark:bg-slate-700 rounded-xl text-xs text-white font-bold transition-colors"
+              >
+                Apply
+              </button>
             </div>
+
             {couponError && <span className="text-[10px] text-rose-500 font-bold mt-1.5 block">{couponError}</span>}
-            {appliedCouponDetails && (
-              <span className="text-[10px] text-emerald-500 font-bold mt-1.5 block">
-                Success! Coupon applied: -₹{couponDiscount}
-              </span>
+
+            {/* Applied coupons list — each one removable individually */}
+            {appliedCoupons.length > 0 && (
+              <div className="mt-3 flex flex-col gap-2">
+                {appliedCoupons.map((coupon) => (
+                  <div key={coupon.code} className="flex items-center justify-between px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                    <div className="flex flex-col">
+                      <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">
+                        {coupon.code}
+                      </span>
+                      <span className="text-[9px] text-emerald-500/70">
+                        {coupon.discountType === 'percentage' ? `${coupon.discountValue}% off` : `₹${coupon.discountValue} flat`} — Saved ₹{coupon.discountAmount}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => removeSingleCoupon(coupon.code)}
+                      className="p-1 hover:bg-rose-500/10 rounded-lg text-rose-500 transition-colors"
+                      title={`Remove ${coupon.code}`}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+
+                {/* Total coupon savings summary */}
+                <div className="flex justify-between items-center px-2 pt-1">
+                  <span className="text-[10px] font-bold text-emerald-500">
+                    Total Coupon Savings: -₹{totalCouponDiscount.toFixed(2)}
+                  </span>
+                  {appliedCoupons.length > 1 && (
+                    <button
+                      onClick={removeAllCoupons}
+                      className="text-[9px] font-bold text-rose-400 hover:text-rose-500 underline transition-colors"
+                    >
+                      Remove All
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
           </div>
 
