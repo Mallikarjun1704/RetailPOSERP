@@ -120,3 +120,16 @@ Go to Suppliers & Stocking -> Inward Stock Builder.
 Select the wholesale supplier and enter the purchase invoice.
 Start typing the name or SKU of your newly registered product in the search field.
 It will dynamically autocomplete and appear in the list! Select it to inward the wholesale units.
+
+-----------------------------------------------
+No, you do not need to share your code or run commands on the target system.
+
+When you run npm run package:win, the builder automatically compiles the frontend, packages it together with the backend code, and produces a single self-contained installer (like RetailPOS Setup 1.0.0.exe) inside the root dist/ folder.
+
+You only need to share that .exe installer with other users. They can run it to install the application on their desktop like a normal app.
+
+⚠️ Important Prerequisites for the Target System
+Since this is an offline-first app that launches its own server and database on the user's machine, the target system must have the following two dependencies installed before running the app:
+
+MongoDB: The application connects to a local database instance (mongodb://127.0.0.1:27017). The target machine must have MongoDB Community Server installed and running.
+Node.js: The Electron app uses the system's node command to start the Express backend server (node backend/server.js). Therefore, the target machine must have Node.js installed and available in the system path (PATH).
