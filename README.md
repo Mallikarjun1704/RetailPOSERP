@@ -69,6 +69,9 @@ This builds:
 2. A single, click-to-run installation package inside the root `dist/` directory (e.g., `dist/RetailPOS Setup 1.0.0.exe`).
 
 ---
+npm run electron:build -> runs backend and frontend dev servers. .exe
+npm run electron:start -> runs both dev server and front-end dev server together .
+npm run package:win ->uses electron-builder to create installer.
 
 ## ⌨️ POS Billing Keyboard Navigation Shortcuts
 
