@@ -184,14 +184,14 @@ const Inventory: React.FC = () => {
     const payload = {
       name,
       modelNumber,
-      sku,
+      sku: sku || `SKU-${Date.now()}${Math.floor(Math.random() * 1000)}`,
       barcode: barcode || undefined,
       category,
       brand,
       description,
       mrp,
       purchasePrice,
-      sellingPrice,
+      sellingPrice: mrp,
       gstRate,
       stock: hasIMEI ? imeiList.length : stock,
       lowStockThreshold,
@@ -374,7 +374,6 @@ const Inventory: React.FC = () => {
                   <th className="pos-grid-header">Name</th>
                   <th className="pos-grid-header">Category</th>
                   <th className="pos-grid-header">Brand</th>
-                  <th className="pos-grid-header text-right">Selling Price</th>
                   <th className="pos-grid-header text-center">In Stock</th>
                   <th className="pos-grid-header text-center">Action</th>
                 </tr>
@@ -400,9 +399,6 @@ const Inventory: React.FC = () => {
                       </td>
                       <td className="px-4 py-4 text-xs text-slate-600 dark:text-slate-400">
                         {typeof prod.brand === 'object' ? prod.brand.name : ''}
-                      </td>
-                      <td className="px-4 py-4 text-right font-black text-sm text-slate-900 dark:text-white">
-                        ₹{prod.sellingPrice.toLocaleString('en-IN')}
                       </td>
                       <td className="px-4 py-4 text-center">
                         <div className="flex items-center justify-center gap-2">
@@ -549,37 +545,6 @@ const Inventory: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">SKU Code*</label>
-                  <input
-                    type="text"
-                    value={sku}
-                    onChange={(e) => setSku(e.target.value)}
-                    className="px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-brand-500"
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Barcode</label>
-                  <input
-                    type="text"
-                    value={barcode}
-                    onChange={(e) => setBarcode(e.target.value)}
-                    className="px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-brand-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Model Number</label>
-                <input
-                  type="text"
-                  value={modelNumber}
-                  onChange={(e) => setModelNumber(e.target.value)}
-                  className="px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-brand-500"
-                />
-              </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="flex flex-col gap-1">
@@ -607,7 +572,7 @@ const Inventory: React.FC = () => {
               </div>
 
               {/* Price Calculations */}
-              <div className="p-4 bg-slate-50 dark:bg-slate-950/60 rounded-2xl grid grid-cols-3 gap-3 col-span-2 border border-slate-200/40 dark:border-slate-800">
+              <div className="p-4 bg-slate-50 dark:bg-slate-950/60 rounded-2xl grid grid-cols-2 gap-3 col-span-2 border border-slate-200/40 dark:border-slate-800">
                 <div className="flex flex-col gap-1">
                   <label className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">MRP (INR)*</label>
                   <input
@@ -624,16 +589,6 @@ const Inventory: React.FC = () => {
                     type="number"
                     value={purchasePrice}
                     onChange={(e) => setPurchasePrice(Number(e.target.value))}
-                    className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:border-brand-500"
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Selling Price*</label>
-                  <input
-                    type="number"
-                    value={sellingPrice}
-                    onChange={(e) => setSellingPrice(Number(e.target.value))}
                     className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:border-brand-500"
                     required
                   />

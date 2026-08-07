@@ -68,7 +68,9 @@ export const createProduct = async (req, res) => {
   const { name, modelNumber, sku, barcode, category, brand, description, mrp, purchasePrice, sellingPrice, gstRate, stock, lowStockThreshold, hasIMEI, imeiList, warrantyMonths, image } = req.body;
 
   try {
-    const skuExists = await Product.findOne({ sku });
+    const finalSku = sku || `SKU-${Date.now()}${Math.floor(Math.random() * 1000)}`;
+
+    const skuExists = await Product.findOne({ sku: finalSku });
     if (skuExists) {
       return res.status(400).json({ success: false, message: 'SKU already exists' });
     }
@@ -93,8 +95,8 @@ export const createProduct = async (req, res) => {
 
     const product = new Product({
       name,
-      modelNumber,
-      sku,
+      modelNumber: modelNumber || '',
+      sku: finalSku,
       barcode: barcode || undefined,
       category,
       brand,

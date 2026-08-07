@@ -50,9 +50,16 @@ function createWindow() {
   const isDev = !app.isPackaged && process.env.NODE_ENV === 'development';
   if (isDev) {
     // In dev: connect to local Vite dev server
-    mainWindow.loadURL('http://127.0.0.1:5173');
-    // Open Chrome devtools (uncomment to debug)
-    // mainWindow.webContents.openDevTools();
+    const loadViteServer = () => {
+      mainWindow.loadURL('http://127.0.0.1:5173').catch((err) => {
+        console.log('Vite dev server not ready yet, retrying in 1 second...');
+        setTimeout(loadViteServer, 1000);
+      });
+    };
+    loadViteServer();
+    
+    // Open Chrome devtools
+    mainWindow.webContents.openDevTools();
   } else {
     // In prod: load compiled static HTML bundle
     mainWindow.loadFile(path.join(__dirname, '../frontend/dist/index.html'));

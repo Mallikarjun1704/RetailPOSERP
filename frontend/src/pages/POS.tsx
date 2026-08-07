@@ -15,7 +15,8 @@ import {
   Minus,
   Sparkles,
   Printer,
-  ChevronDown
+  ChevronDown,
+  Gift
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -35,10 +36,8 @@ const POS: React.FC = () => {
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const [customerFound, setCustomerFound] = useState(false);
 
-  // Coupon state — now supports multiple coupons
-  const [couponCode, setCouponCode] = useState('');
-  const [appliedCoupons, setAppliedCoupons] = useState<{ code: string; discountType: string; discountValue: number; discountAmount: number }[]>([]);
-  const [couponError, setCouponError] = useState('');
+  // Gift / Offer state
+  const [giftItem, setGiftItem] = useState('');
 
   // Payment State
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'UPI' | 'EMI'>('Cash');
@@ -160,20 +159,21 @@ const POS: React.FC = () => {
     setCart(updatedCart);
   };
 
+  // 5. Update selling price dynamically
+  const updateSellingPrice = (index: number, newPrice: number) => {
+    const updatedCart = [...cart];
+    updatedCart[index].sellingPrice = Math.max(0, newPrice);
+    setCart(updatedCart);
+  };
+
   // 6. Delete row
   const deleteFromCart = (index: number) => {
     const updated = [...cart];
     updated.splice(index, 1);
     setCart(updated);
-    // Clear all coupons if cart changes, so user can re-validate
-    if (appliedCoupons.length > 0) {
-      removeAllCoupons();
-    }
   };
 
   // 7. Calculate calculations
-  const totalCouponDiscount = appliedCoupons.reduce((sum, c) => sum + c.discountAmount, 0);
-
   const calculateTotals = () => {
     let subtotal = 0; // Taxable values total
     let gstTotal = 0;
@@ -190,68 +190,17 @@ const POS: React.FC = () => {
       itemDiscounts += item.discount * item.quantity;
     });
 
-    const couponDeduction = totalCouponDiscount;
-    const finalAmount = Math.max(0, subtotal + gstTotal - couponDeduction - extraDiscount);
+    const finalAmount = Math.max(0, subtotal + gstTotal - extraDiscount);
 
     return {
       subtotal: Number(subtotal.toFixed(2)),
       gst: Number(gstTotal.toFixed(2)),
-      discounts: Number((itemDiscounts + couponDeduction).toFixed(2)),
+      discounts: Number(itemDiscounts.toFixed(2)),
       final: Math.round(finalAmount)
     };
   };
 
   const totals = calculateTotals();
-
-  // 8. Validate Coupon — supports adding multiple coupons
-  const applyCoupon = async () => {
-    if (!couponCode) return;
-    setCouponError('');
-
-    // Prevent duplicate coupon codes
-    if (appliedCoupons.some(c => c.code === couponCode.toUpperCase())) {
-      setCouponError('This coupon is already applied.');
-      return;
-    }
-
-    try {
-      const { data } = await api.post('/coupons/validate', {
-        code: couponCode,
-        cartItems: cart.map(item => ({
-          product: item.product,
-          sellingPrice: item.sellingPrice,
-          quantity: item.quantity,
-          discount: item.discount
-        })),
-        subtotal: totals.subtotal + totals.gst // apply to gross items total
-      });
-
-      if (data.success) {
-        setAppliedCoupons(prev => [...prev, {
-          code: data.data.code,
-          discountType: data.data.discountType,
-          discountValue: data.data.discountValue,
-          discountAmount: data.data.discountAmount
-        }]);
-        setCouponCode(''); // Clear input so user can type another coupon
-      }
-    } catch (err: any) {
-      setCouponError(err.response?.data?.message || 'Invalid Coupon Code');
-    }
-  };
-
-  // Remove a single coupon by code
-  const removeSingleCoupon = (code: string) => {
-    setAppliedCoupons(prev => prev.filter(c => c.code !== code));
-    setCouponError('');
-  };
-
-  // Remove all coupons
-  const removeAllCoupons = () => {
-    setCouponCode('');
-    setAppliedCoupons([]);
-    setCouponError('');
-  };
 
   // 9. Checkout & place transaction
   const showError = (msg: string) => {
@@ -274,9 +223,6 @@ const POS: React.FC = () => {
     }
 
     try {
-      const allCouponCodes = appliedCoupons.map(c => c.code).join(', ');
-      const perItemCouponDiscount = appliedCoupons.length > 0 ? (totalCouponDiscount / cart.length) : 0;
-
       const checkoutPayload = {
         customerMobile,
         customerName,
@@ -285,12 +231,12 @@ const POS: React.FC = () => {
         paymentMethod,
         paymentDetails,
         extraDiscount,
+        giftItem,
         items: cart.map(item => ({
           product: item.product,
           quantity: item.quantity,
           sellingPrice: item.sellingPrice,
-          discount: item.discount + perItemCouponDiscount, // split total coupon discount across all cart items
-          couponCode: allCouponCodes,
+          discount: item.discount,
           imei: item.imei || ''
         }))
       };
@@ -320,7 +266,7 @@ const POS: React.FC = () => {
     setCustomerAddress('');
     setLoyaltyPoints(0);
     setCustomerFound(false);
-    removeAllCoupons();
+    setGiftItem('');
     setPaymentMethod('Cash');
     setPaymentDetails('');
     setExtraDiscount(0);
@@ -459,9 +405,18 @@ const POS: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Selling price */}
+                      {/* Selling price - EDITABLE */}
                       <td className="px-4 py-4 text-right">
-                        <span className="text-sm font-semibold text-slate-900 dark:text-white">₹{item.sellingPrice.toLocaleString('en-IN')}</span>
+                        <div className="flex items-center justify-end gap-1">
+                          <span className="text-xs font-bold text-slate-400">₹</span>
+                          <input
+                            type="number"
+                            value={item.sellingPrice}
+                            onChange={(e) => updateSellingPrice(idx, Number(e.target.value))}
+                            className="w-24 px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-right outline-none focus:border-brand-500 text-slate-900 dark:text-white"
+                            min={0}
+                          />
+                        </div>
                       </td>
 
                       {/* Line GST */}
@@ -547,73 +502,20 @@ const POS: React.FC = () => {
             </div>
           </div>
 
-          {/* 2. Coupons & Pricing offers — Multiple Coupons */}
+          {/* 2. Complimentary Gift / Offer */}
           <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/50 dark:border-slate-800/80 rounded-2xl">
             <div className="flex items-center gap-2 mb-3.5">
-              <Tag size={16} className="text-accent-500" />
-              <h3 className="font-extrabold text-sm text-slate-800 dark:text-slate-200 uppercase tracking-wider">Coupon Offers</h3>
+              <Gift size={16} className="text-emerald-500" />
+              <h3 className="font-extrabold text-sm text-slate-800 dark:text-slate-200 uppercase tracking-wider">Complimentary Gift / Offer</h3>
             </div>
 
-            {/* Input + Apply button — always enabled for additional coupons */}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder={appliedCoupons.length > 0 ? "Add another coupon..." : "Apply coupon code"}
-                value={couponCode}
-                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                onKeyDown={(e) => { if (e.key === 'Enter') applyCoupon(); }}
-                className="flex-1 px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:border-accent-500 text-slate-900 dark:text-white font-bold tracking-widest"
-              />
-              <button 
-                onClick={applyCoupon}
-                disabled={!couponCode}
-                className="px-4 bg-accent-600 hover:bg-accent-500 disabled:bg-slate-300 disabled:dark:bg-slate-700 rounded-xl text-xs text-white font-bold transition-colors"
-              >
-                Apply
-              </button>
-            </div>
-
-            {couponError && <span className="text-[10px] text-rose-500 font-bold mt-1.5 block">{couponError}</span>}
-
-            {/* Applied coupons list — each one removable individually */}
-            {appliedCoupons.length > 0 && (
-              <div className="mt-3 flex flex-col gap-2">
-                {appliedCoupons.map((coupon) => (
-                  <div key={coupon.code} className="flex items-center justify-between px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                    <div className="flex flex-col">
-                      <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">
-                        {coupon.code}
-                      </span>
-                      <span className="text-[9px] text-emerald-500/70">
-                        {coupon.discountType === 'percentage' ? `${coupon.discountValue}% off` : `₹${coupon.discountValue} flat`} — Saved ₹{coupon.discountAmount}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => removeSingleCoupon(coupon.code)}
-                      className="p-1 hover:bg-rose-500/10 rounded-lg text-rose-500 transition-colors"
-                      title={`Remove ${coupon.code}`}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                ))}
-
-                {/* Total coupon savings summary */}
-                <div className="flex justify-between items-center px-2 pt-1">
-                  <span className="text-[10px] font-bold text-emerald-500">
-                    Total Coupon Savings: -₹{totalCouponDiscount.toFixed(2)}
-                  </span>
-                  {appliedCoupons.length > 1 && (
-                    <button
-                      onClick={removeAllCoupons}
-                      className="text-[9px] font-bold text-rose-400 hover:text-rose-500 underline transition-colors"
-                    >
-                      Remove All
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
+            <input
+              type="text"
+              placeholder="e.g. Free Headphones, Speaker, Airbuds"
+              value={giftItem}
+              onChange={(e) => setGiftItem(e.target.value)}
+              className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:border-emerald-500 text-slate-900 dark:text-white font-medium"
+            />
           </div>
 
           {/* 3. Payment Selector */}

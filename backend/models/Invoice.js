@@ -102,6 +102,11 @@ const invoiceSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  giftItem: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   cashier: {
     userId: {
       type: mongoose.Schema.Types.ObjectId,

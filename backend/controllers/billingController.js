@@ -17,7 +17,7 @@ const generateInvoiceNumber = () => {
 // @route   POST /api/billing/checkout
 // @access  Private
 export const checkout = async (req, res) => {
-  const { customerMobile, customerName, customerEmail, customerAddress, items, paymentMethod, paymentDetails, extraDiscount } = req.body;
+  const { customerMobile, customerName, customerEmail, customerAddress, items, paymentMethod, paymentDetails, extraDiscount, giftItem } = req.body;
 
   try {
     if (!items || items.length === 0) {
@@ -133,6 +133,7 @@ export const checkout = async (req, res) => {
       finalAmount: Math.round(finalPayable), // round off to nearest rupee
       paymentMethod,
       paymentDetails: paymentDetails || '',
+      giftItem: giftItem || '',
       cashier: {
         userId: req.user._id,
         name: req.user.name
@@ -212,8 +213,8 @@ export const generateInvoicePDF = async (req, res) => {
     doc.fillColor('#0f172a').fontSize(20).font('Helvetica-Bold').text('TECH MART SALES & SERVICE', 30, 30);
     doc.fontSize(8).font('Helvetica').fillColor('#64748b');
     doc.text('Smartphones, Televisions & Home Appliances Hub', 30, 52);
-    doc.text('GSTIN: 29AAAAA0000A1Z5 | Ph: +91 9876543210', 30, 63);
-    doc.text('123 Retail Lane, Bangalore, Karnataka, 560001', 30, 74);
+    doc.text('GSTIN: 29AENP27677M12ZZ | Ph: 8050336783 & 9900642249', 30, 63);
+    doc.text('Ganj circle, Koppal, karnataka-583231', 30, 74);
 
     // --- Invoice Metadata ---
     doc.fillColor('#0f172a').fontSize(14).font('Helvetica-Bold').text('TAX INVOICE', 400, 30, { align: 'right' });
@@ -231,11 +232,6 @@ export const generateInvoicePDF = async (req, res) => {
     doc.text(`Mobile: ${invoice.customer.mobile}`, 30, 136);
     if (invoice.customer.email) doc.text(`Email: ${invoice.customer.email}`, 30, 148);
     if (invoice.customer.address) doc.text(`Address: ${invoice.customer.address}`, 30, 160);
-
-    // --- Loyalty points earned ---
-    doc.fontSize(9).font('Helvetica-Bold').fillColor('#0f766e');
-    doc.text(`Loyalty Points Earned: +${invoice.loyaltyPointsEarned} pts`, 400, 110, { align: 'right' });
-    doc.text(`Cashier: ${invoice.cashier.name}`, 400, 124, { align: 'right' });
 
     doc.moveTo(30, 180).lineTo(565, 180).strokeColor('#cbd5e1').stroke();
 
@@ -259,9 +255,19 @@ export const generateInvoicePDF = async (req, res) => {
       doc.text(String(index + 1), 30, y);
 
       // Multi-brand product string
-      doc.font('Helvetica-Bold').text(`${item.brandName} - ${item.name}`, 65, y);
-      doc.font('Helvetica').fontSize(7.5).fillColor('#64748b');
-      doc.text(`SKU: ${item.sku}${item.imei ? ' | IMEI: ' + item.imei : ''}`, 65, y + 11);
+      doc.font('Helvetica-Bold').fillColor('#0f172a').text(`${item.brandName ? item.brandName + ' - ' : ''}${item.name}`, 65, y);
+
+      const halfGst = (item.gstAmount / 2).toFixed(2);
+
+      if (item.imei) {
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#0284c7');
+        doc.text(`IMEI / Serial No: ${item.imei}`, 65, y + 11);
+        doc.font('Helvetica').fontSize(7.5).fillColor('#64748b');
+        doc.text(`SKU: ${item.sku} | (CGST: ₹${halfGst} | SGST: ₹${halfGst})`, 65, y + 21);
+      } else {
+        doc.font('Helvetica').fontSize(7.5).fillColor('#64748b');
+        doc.text(`SKU: ${item.sku} | (CGST: ₹${halfGst} | SGST: ₹${halfGst})`, 65, y + 11);
+      }
 
       doc.fontSize(8.5).fillColor('#334155');
       doc.text(String(item.quantity), 280, y, { width: 30, align: 'center' });
@@ -270,12 +276,7 @@ export const generateInvoicePDF = async (req, res) => {
       doc.text(`${item.gstRate}%`, 440, y, { width: 35, align: 'center' });
       doc.text(`₹${item.finalPrice.toFixed(2)}`, 485, y, { width: 80, align: 'right' });
 
-      // CGST/SGST split logic display
-      const halfGst = (item.gstAmount / 2).toFixed(2);
-      doc.fontSize(7).fillColor('#64748b');
-      doc.text(`(CGST: ₹${halfGst} | SGST: ₹${halfGst})`, 65, y + 21);
-
-      y += 33;
+      y += item.imei ? 36 : 30;
     });
 
     doc.moveTo(30, y).lineTo(565, y).strokeColor('#cbd5e1').lineWidth(1).stroke();
@@ -295,6 +296,11 @@ export const generateInvoicePDF = async (req, res) => {
       doc.fillColor('#b91c1c');
       doc.text('Discount Applied:', 300, y, { width: 150, align: 'left' });
       doc.text(`- ₹${invoice.totalDiscount.toFixed(2)}`, 450, y, { width: 115, align: 'right' });
+    }
+
+    if (invoice.giftItem) {
+      doc.fillColor('#059669').fontSize(9).font('Helvetica-Bold');
+      doc.text(`Complimentary Gift / Offer: ${invoice.giftItem}`, 30, y);
     }
 
     y += 20;
