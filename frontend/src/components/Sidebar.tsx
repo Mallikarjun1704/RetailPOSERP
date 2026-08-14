@@ -8,13 +8,13 @@ import {
   Users,
   Truck,
   BarChart3,
-  Ticket,
   UsersRound,
   LogOut,
   Sun,
   Moon,
   Laptop
 } from 'lucide-react';
+import TMLogo from './TMLogo';
 
 const Sidebar: React.FC = () => {
   const { user, logout } = useAuth();
@@ -50,7 +50,6 @@ const Sidebar: React.FC = () => {
     { name: 'Customers', path: '/customers', icon: Users, roles: ['admin', 'staff'] },
     { name: 'Suppliers & Restocks', path: '/suppliers', icon: Truck, roles: ['admin', 'staff'] },
     { name: 'Reports & Analytics', path: '/reports', icon: BarChart3, roles: ['admin', 'staff'] },
-    { name: 'Coupons & Offers', path: '/coupons', icon: Ticket, roles: ['admin', 'staff'] },
     { name: 'Staff Management', path: '/users', icon: UsersRound, roles: ['admin'] } // Admin only
   ];
 
@@ -61,9 +60,7 @@ const Sidebar: React.FC = () => {
       {/* Upper Brand Section */}
       <div className="flex flex-col">
         <div className="p-6 flex items-center gap-3 border-b border-slate-800 bg-slate-950/40">
-          <div className="p-2 bg-brand-500 rounded-lg text-white shadow-lg shadow-brand-500/30 animate-pulse">
-            <Laptop size={22} />
-          </div>
+          <TMLogo size="md" />
           <div>
             <h1 className="font-extrabold text-base tracking-tight text-white font-sans">TECH MART SALES & SERVICE</h1>
             <p className="text-[10px] uppercase font-bold tracking-widest text-brand-400">RetailPOS ERP</p>

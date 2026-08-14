@@ -157,6 +157,8 @@ export interface DashboardStats {
   monthlyRevenue: number;
   todayProfit: number;
   monthlyProfit: number;
+  totalSales: number;
+  totalProfit: number;
   lowStockAlerts: number;
   recentInvoices: Invoice[];
 }

@@ -241,10 +241,10 @@ export const generateInvoicePDF = async (req, res) => {
     doc.text('S.No', 30, y);
     doc.text('Product / Details', 65, y);
     doc.text('Qty', 280, y, { width: 30, align: 'center' });
-    doc.text('MRP', 320, y, { width: 50, align: 'right' });
-    doc.text('Taxable', 380, y, { width: 50, align: 'right' });
+    doc.text('MRP (Rs)', 320, y, { width: 50, align: 'right' });
+    doc.text('Taxable (Rs)', 380, y, { width: 50, align: 'right' });
     doc.text('GST %', 440, y, { width: 35, align: 'center' });
-    doc.text('Total (INR)', 485, y, { width: 80, align: 'right' });
+    doc.text('Total (Rs)', 485, y, { width: 80, align: 'right' });
 
     doc.moveTo(30, 210).lineTo(565, 210).strokeColor('#94a3b8').lineWidth(1.5).stroke();
 
@@ -263,18 +263,18 @@ export const generateInvoicePDF = async (req, res) => {
         doc.font('Helvetica-Bold').fontSize(8).fillColor('#0284c7');
         doc.text(`IMEI / Serial No: ${item.imei}`, 65, y + 11);
         doc.font('Helvetica').fontSize(7.5).fillColor('#64748b');
-        doc.text(`SKU: ${item.sku} | (CGST: ₹${halfGst} | SGST: ₹${halfGst})`, 65, y + 21);
+        doc.text(`SKU: ${item.sku} | (CGST: Rs. ${halfGst} | SGST: Rs. ${halfGst})`, 65, y + 21);
       } else {
         doc.font('Helvetica').fontSize(7.5).fillColor('#64748b');
-        doc.text(`SKU: ${item.sku} | (CGST: ₹${halfGst} | SGST: ₹${halfGst})`, 65, y + 11);
+        doc.text(`SKU: ${item.sku} | (CGST: Rs. ${halfGst} | SGST: Rs. ${halfGst})`, 65, y + 11);
       }
 
       doc.fontSize(8.5).fillColor('#334155');
       doc.text(String(item.quantity), 280, y, { width: 30, align: 'center' });
-      doc.text(`₹${item.mrp.toFixed(2)}`, 320, y, { width: 50, align: 'right' });
-      doc.text(`₹${item.taxableAmount.toFixed(2)}`, 380, y, { width: 50, align: 'right' });
+      doc.text(`${item.mrp.toFixed(2)}`, 320, y, { width: 50, align: 'right' });
+      doc.text(`${item.taxableAmount.toFixed(2)}`, 380, y, { width: 50, align: 'right' });
       doc.text(`${item.gstRate}%`, 440, y, { width: 35, align: 'center' });
-      doc.text(`₹${item.finalPrice.toFixed(2)}`, 485, y, { width: 80, align: 'right' });
+      doc.text(`${item.finalPrice.toFixed(2)}`, 485, y, { width: 80, align: 'right' });
 
       y += item.imei ? 36 : 30;
     });
@@ -285,17 +285,17 @@ export const generateInvoicePDF = async (req, res) => {
     y += 15;
     doc.fillColor('#475569').fontSize(9).font('Helvetica-Bold');
     doc.text('Taxable Amount Total (Subtotal):', 300, y, { width: 150, align: 'left' });
-    doc.text(`₹${invoice.subtotal.toFixed(2)}`, 450, y, { width: 115, align: 'right' });
+    doc.text(`Rs. ${invoice.subtotal.toFixed(2)}`, 450, y, { width: 115, align: 'right' });
 
     y += 15;
     doc.text('Total Tax (GST):', 300, y, { width: 150, align: 'left' });
-    doc.text(`₹${invoice.totalGst.toFixed(2)}`, 450, y, { width: 115, align: 'right' });
+    doc.text(`Rs. ${invoice.totalGst.toFixed(2)}`, 450, y, { width: 115, align: 'right' });
 
     if (invoice.totalDiscount > 0) {
       y += 15;
       doc.fillColor('#b91c1c');
       doc.text('Discount Applied:', 300, y, { width: 150, align: 'left' });
-      doc.text(`- ₹${invoice.totalDiscount.toFixed(2)}`, 450, y, { width: 115, align: 'right' });
+      doc.text(`- Rs. ${invoice.totalDiscount.toFixed(2)}`, 450, y, { width: 115, align: 'right' });
     }
 
     if (invoice.giftItem) {
@@ -307,7 +307,7 @@ export const generateInvoicePDF = async (req, res) => {
     doc.rect(300, y - 5, 265, 25).fill('#f1f5f9');
     doc.fillColor('#0f172a').fontSize(11).font('Helvetica-Bold');
     doc.text('Grand Total (Round Off):', 305, y, { width: 150 });
-    doc.text(`₹${invoice.finalAmount.toLocaleString('en-IN')}.00`, 450, y, { width: 110, align: 'right' });
+    doc.text(`Rs. ${invoice.finalAmount.toLocaleString('en-IN')}.00`, 450, y, { width: 110, align: 'right' });
 
     // --- Footer Section ---
     doc.fillColor('#64748b').fontSize(8.5).font('Helvetica-Oblique');

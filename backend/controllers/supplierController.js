@@ -119,10 +119,11 @@ export const createPurchaseRecord = async (req, res) => {
 
       const qty = Number(item.quantity);
       const price = Number(item.purchasePrice);
-      const gstRate = Number(item.gstRate || product.gstRate);
+      const gstRate = Number(item.gstRate || product.gstRate || 18);
 
-      const itemTaxable = price * qty;
-      const itemGst = (itemTaxable * gstRate) / 100;
+      const itemTotal = price * qty;
+      const itemTaxable = itemTotal / (1 + (gstRate / 100));
+      const itemGst = itemTotal - itemTaxable;
 
       subtotal += itemTaxable;
       totalGst += itemGst;
@@ -199,3 +200,79 @@ export const getPurchaseRecords = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// @desc    Get single supplier profile by ID with purchase history
+// @route   GET /api/suppliers/:id
+// @access  Private
+export const getSupplierById = async (req, res) => {
+  try {
+    const supplier = await Supplier.findById(req.params.id);
+    if (!supplier) {
+      return res.status(404).json({ success: false, message: 'Supplier not found' });
+    }
+
+    const purchases = await PurchaseRecord.find({ supplier: supplier._id })
+      .populate('items.product', 'name sku modelNumber')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: {
+        supplier,
+        purchases
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Record a payment against a supplier purchase bill
+// @route   POST /api/suppliers/purchases/:id/payment
+// @access  Private
+export const recordBillPayment = async (req, res) => {
+  const { paymentAmount } = req.body;
+
+  try {
+    const payVal = Number(paymentAmount);
+    if (isNaN(payVal) || payVal <= 0) {
+      return res.status(400).json({ success: false, message: 'Payment amount must be greater than zero' });
+    }
+
+    const purchase = await PurchaseRecord.findById(req.params.id);
+    if (!purchase) {
+      return res.status(404).json({ success: false, message: 'Purchase bill not found' });
+    }
+
+    const supplier = await Supplier.findById(purchase.supplier);
+    if (!supplier) {
+      return res.status(404).json({ success: false, message: 'Supplier account not found' });
+    }
+
+    // Update bill payment metrics
+    const actualPay = Math.min(payVal, purchase.balanceDue);
+    purchase.amountPaid += actualPay;
+    purchase.balanceDue = Math.max(0, purchase.totalAmount - purchase.amountPaid);
+
+    if (purchase.balanceDue <= 0) {
+      purchase.status = 'Paid';
+    } else if (purchase.amountPaid > 0) {
+      purchase.status = 'Partial';
+    }
+
+    await purchase.save();
+
+    // Update supplier outstanding balance
+    supplier.outstandingBalance = Math.max(0, supplier.outstandingBalance - actualPay);
+    await supplier.save();
+
+    res.json({
+      success: true,
+      data: purchase,
+      message: `Payment of ₹${actualPay} recorded successfully.`
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+

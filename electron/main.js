@@ -36,6 +36,7 @@ function createWindow() {
     minHeight: 600,
     show: false,
     frame: true, // standard OS desktop wrapper
+    icon: path.join(__dirname, 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

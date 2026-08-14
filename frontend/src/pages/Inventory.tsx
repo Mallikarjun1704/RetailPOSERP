@@ -275,41 +275,7 @@ const Inventory: React.FC = () => {
       <header className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-sans">Inventory Hub</h2>
-          <p className="text-slate-500 text-sm">Organize products, brands, categories, and physical stocks.</p>
-        </div>
-
-        <div className="flex gap-3">
-          {/* Tab selectors */}
-          <div className="bg-slate-200/60 dark:bg-slate-900 p-1.5 rounded-2xl flex border border-slate-300/40 dark:border-slate-800">
-            <button 
-              onClick={() => setActiveTab('products')}
-              className={`px-4 py-2 text-xs font-bold uppercase rounded-xl transition-all ${activeTab === 'products' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
-            >
-              Products
-            </button>
-            <button 
-              onClick={() => setActiveTab('categories')}
-              className={`px-4 py-2 text-xs font-bold uppercase rounded-xl transition-all ${activeTab === 'categories' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
-            >
-              Categories
-            </button>
-            <button 
-              onClick={() => setActiveTab('brands')}
-              className={`px-4 py-2 text-xs font-bold uppercase rounded-xl transition-all ${activeTab === 'brands' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
-            >
-              Brands
-            </button>
-          </div>
-
-          {isAdmin && (
-            <button
-              onClick={() => activeTab === 'products' ? openProductModal() : activeTab === 'categories' ? setCategoryModal(true) : setBrandModal(true)}
-              className="px-5 py-3 bg-brand-500 hover:bg-brand-600 rounded-2xl text-xs font-extrabold uppercase text-white shadow-lg shadow-brand-500/20 active:scale-[0.98] transition-all flex items-center gap-2"
-            >
-              <Plus size={14} />
-              <span>Add {activeTab.slice(0, -1)}</span>
-            </button>
-          )}
+          <p className="text-slate-500 text-sm">View current stock levels synced from supplier bills.</p>
         </div>
       </header>
 
@@ -374,8 +340,9 @@ const Inventory: React.FC = () => {
                   <th className="pos-grid-header">Name</th>
                   <th className="pos-grid-header">Category</th>
                   <th className="pos-grid-header">Brand</th>
-                  <th className="pos-grid-header text-center">In Stock</th>
-                  <th className="pos-grid-header text-center">Action</th>
+                  <th className="pos-grid-header text-right">Purchase Price</th>
+                  <th className="pos-grid-header text-center">Stock Synced</th>
+                  <th className="pos-grid-header text-center">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -400,9 +367,12 @@ const Inventory: React.FC = () => {
                       <td className="px-4 py-4 text-xs text-slate-600 dark:text-slate-400">
                         {typeof prod.brand === 'object' ? prod.brand.name : ''}
                       </td>
+                      <td className="px-4 py-4 text-right text-xs font-bold text-slate-900 dark:text-white">
+                        ₹{prod.purchasePrice?.toLocaleString('en-IN') || 0}
+                      </td>
                       <td className="px-4 py-4 text-center">
                         <div className="flex items-center justify-center gap-2">
-                          <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${prod.stock <= prod.lowStockThreshold ? 'bg-rose-500/10 text-rose-500' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'}`}>
+                          <span className={`px-3 py-1 text-xs font-bold rounded-full ${prod.stock === 0 ? 'bg-rose-500/10 text-rose-500' : prod.stock <= prod.lowStockThreshold ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
                             {prod.stock} Units
                           </span>
                           {prod.stock <= prod.lowStockThreshold && (
@@ -411,29 +381,22 @@ const Inventory: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-4 py-4 text-center">
-                        {isAdmin && (
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button 
-                              onClick={() => openProductModal(prod)}
-                              className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-500 transition-colors"
-                            >
-                              <Edit size={14} />
-                            </button>
-                            <button 
-                              onClick={() => handleProductDelete(prod._id)}
-                              className="p-2 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl text-rose-500 transition-colors"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        )}
+                        <span className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-full ${
+                          prod.stock === 0 
+                            ? 'bg-rose-500/10 text-rose-500' 
+                            : prod.stock <= prod.lowStockThreshold 
+                              ? 'bg-amber-500/10 text-amber-500' 
+                              : 'bg-emerald-500/10 text-emerald-500'
+                        }`}>
+                          {prod.stock === 0 ? 'Out of Stock' : prod.stock <= prod.lowStockThreshold ? 'Low Stock' : 'In Stock'}
+                        </span>
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
                     <td colSpan={7} className="text-center py-20 text-slate-400 dark:text-slate-600">
-                      No products found. Add items to database.
+                      No inventory records found. Stock is populated directly from supplier bills.
                     </td>
                   </tr>
                 )}
@@ -467,59 +430,6 @@ const Inventory: React.FC = () => {
         </div>
       )}
 
-      {/* CATEGORIES TAB CONTENT */}
-      {activeTab === 'categories' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {categories.map(cat => (
-            <div key={cat._id} className="p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-              <div className="flex flex-col gap-2">
-                <div className="p-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl w-fit">
-                  <Layers size={18} />
-                </div>
-                <h3 className="font-extrabold text-base text-slate-900 dark:text-white leading-tight">{cat.name}</h3>
-                <p className="text-xs text-slate-400 leading-relaxed truncate">{cat.description || 'No description provided.'}</p>
-              </div>
-              <div className="flex gap-2.5 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/80 justify-end">
-                {isAdmin && (
-                  <button
-                    onClick={() => { setEditCategory(cat); setCatName(cat.name); setCatDesc(cat.description || ''); setCategoryModal(true); }}
-                    className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-500 transition-all"
-                  >
-                    <Edit size={14} />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* BRANDS TAB CONTENT */}
-      {activeTab === 'brands' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {brands.map(br => (
-            <div key={br._id} className="p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-              <div className="flex flex-col gap-2">
-                <div className="p-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl w-fit">
-                  <Tag size={18} />
-                </div>
-                <h3 className="font-extrabold text-base text-slate-900 dark:text-white leading-tight">{br.name}</h3>
-                <p className="text-xs text-slate-400 leading-relaxed truncate">{br.description || 'No description provided.'}</p>
-              </div>
-              <div className="flex gap-2.5 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/80 justify-end">
-                {isAdmin && (
-                  <button
-                    onClick={() => { setEditBrand(br); setBrandName(br.name); setBrandDesc(br.description || ''); setBrandModal(true); }}
-                    className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-500 transition-all"
-                  >
-                    <Edit size={14} />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* PRODUCT FORM MODAL */}
       {productModal && (
@@ -697,105 +607,6 @@ const Inventory: React.FC = () => {
         </div>
       )}
 
-      {/* CATEGORY DIALOG MODAL */}
-      {categoryModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <form 
-            onSubmit={handleCategorySubmit}
-            className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 flex flex-col gap-4 animate-scaleUp text-slate-800 dark:text-slate-200"
-          >
-            <h3 className="text-lg font-black text-slate-900 dark:text-white">
-              {editCategory ? 'Edit Category' : 'Create Category'}
-            </h3>
-            
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold uppercase text-slate-400">Category Name*</label>
-              <input
-                type="text"
-                value={catName}
-                onChange={(e) => setCatName(e.target.value)}
-                className="px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-brand-500"
-                required
-              />
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold uppercase text-slate-400">Description</label>
-              <textarea
-                value={catDesc}
-                onChange={(e) => setCatDesc(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-brand-500 h-20"
-              />
-            </div>
-
-            <div className="flex gap-3 justify-end mt-4">
-              <button
-                type="button"
-                onClick={() => { setCategoryModal(false); setEditCategory(null); }}
-                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold text-xs uppercase"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold text-xs uppercase"
-              >
-                Save
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* BRAND DIALOG MODAL */}
-      {brandModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <form 
-            onSubmit={handleBrandSubmit}
-            className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 flex flex-col gap-4 animate-scaleUp text-slate-800 dark:text-slate-200"
-          >
-            <h3 className="text-lg font-black text-slate-900 dark:text-white">
-              {editBrand ? 'Edit Brand' : 'Create Brand'}
-            </h3>
-            
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold uppercase text-slate-400">Brand Name*</label>
-              <input
-                type="text"
-                value={brandName}
-                onChange={(e) => setBrandName(e.target.value)}
-                className="px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-brand-500"
-                required
-              />
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold uppercase text-slate-400">Description</label>
-              <textarea
-                value={brandDesc}
-                onChange={(e) => setBrandDesc(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-brand-500 h-20"
-              />
-            </div>
-
-            <div className="flex gap-3 justify-end mt-4">
-              <button
-                type="button"
-                onClick={() => { setBrandModal(false); setEditBrand(null); }}
-                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold text-xs uppercase"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold text-xs uppercase"
-              >
-                Save
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
 
       {/* TOAST NOTIFICATIONS */}
       {errorMsg && (

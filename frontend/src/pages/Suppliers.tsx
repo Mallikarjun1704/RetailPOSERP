@@ -1,31 +1,48 @@
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
-import { Supplier, Product, PurchaseRecord } from '../types';
+import { Supplier, Product, PurchaseRecord, Category, Brand } from '../types';
 import { 
   Plus, 
   Truck, 
   Search, 
   Edit, 
-  History, 
   Receipt, 
-  Briefcase, 
+  CreditCard,
+  ArrowLeft,
   Barcode, 
   Calculator,
   CornerDownRight,
-  TrendingDown
+  DollarSign,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  PackagePlus,
+  Trash2,
+  Building2,
+  Phone,
+  Mail,
+  MapPin,
+  FileText,
+  Layers,
+  Tag
 } from 'lucide-react';
 
 const Suppliers: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
 
-  const [activeTab, setActiveTab] = useState<'suppliers' | 'restock' | 'history'>('suppliers');
+  // Navigation View States: 'directory' | 'profile' | 'create-bill'
+  const [viewState, setViewState] = useState<'directory' | 'profile' | 'create-bill'>('directory');
+  const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
   
   // Data States
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [selectedSupplierData, setSelectedSupplierData] = useState<Supplier | null>(null);
+  const [supplierPurchases, setSupplierPurchases] = useState<PurchaseRecord[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
 
@@ -42,10 +59,19 @@ const Suppliers: React.FC = () => {
     setTimeout(() => setSuccessMsg(''), 4000);
   };
 
-  // Modal forms
+  // Modals
   const [supplierModal, setSupplierModal] = useState(false);
   const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
-  const [selectedPurchase, setSelectedPurchase] = useState<PurchaseRecord | null>(null);
+  const [categoryModal, setCategoryModal] = useState(false);
+  const [catName, setCatName] = useState('');
+  const [catDesc, setCatDesc] = useState('');
+  const [brandModal, setBrandModal] = useState(false);
+  const [brandName, setBrandName] = useState('');
+  const [brandDesc, setBrandDesc] = useState('');
+  const [newItemModal, setNewItemModal] = useState(false);
+  const [paymentModal, setPaymentModal] = useState(false);
+  const [selectedBillForPayment, setSelectedBillForPayment] = useState<PurchaseRecord | null>(null);
+  const [selectedPurchaseDetail, setSelectedPurchaseDetail] = useState<PurchaseRecord | null>(null);
 
   // Supplier Form Fields
   const [name, setName] = useState('');
@@ -54,38 +80,51 @@ const Suppliers: React.FC = () => {
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
   const [gstin, setGstin] = useState('');
-  const [outstandingBalance, setOutstandingBalance] = useState(0);
 
-  // RESTOCKING BUILDER STATE
-  const [selectedSupplier, setSelectedSupplier] = useState('');
+  // Payment Form State
+  const [paymentAmount, setPaymentAmount] = useState<number | ''>('');
+
+  // Dynamic New Item Popup Form Fields (Only Purchase Price required/visible)
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemModelNumber, setNewItemModelNumber] = useState('');
+  const [newItemCategory, setNewItemCategory] = useState('');
+  const [newItemBrand, setNewItemBrand] = useState('');
+  const [newItemPurchasePrice, setNewItemPurchasePrice] = useState<number | ''>('');
+  const [newItemGstRate, setNewItemGstRate] = useState<number>(18);
+  const [newItemHasIMEI, setNewItemHasIMEI] = useState(false);
+
+  // SUPPLIER BILL CREATION BUILDER STATE
+  const [billSupplierId, setBillSupplierId] = useState('');
   const [restockInvoiceNumber, setRestockInvoiceNumber] = useState('');
   const [restockDate, setRestockDate] = useState(new Date().toISOString().split('T')[0]);
   const [restockItems, setRestockItems] = useState<{
     product: string;
     productName: string;
+    modelNumber?: string;
     quantity: number;
     purchasePrice: number;
     gstRate: number;
     hasIMEI: boolean;
     imeiString: string;
   }[]>([]);
-  const [amountPaid, setAmountPaid] = useState(0);
+  const [amountPaid, setAmountPaid] = useState<number>(0);
 
-  // Autocomplete products under restocking
+  // Product Autocomplete for Bill Builder
   const [prodSearch, setProdSearch] = useState('');
   const [prodResults, setProdResults] = useState<Product[]>([]);
 
-  // Fetch collections
-  const fetchData = async () => {
+  // Fetch initial suppliers & catalogues
+  const fetchSuppliers = async () => {
     try {
+      setLoading(true);
       const supRes = await api.get(`/suppliers?keyword=${keyword}`);
       if (supRes.data.success) setSuppliers(supRes.data.data);
 
-      const purRes = await api.get('/suppliers/purchases');
-      if (purRes.data.success) setPurchases(purRes.data.data);
-      
-      const prodRes = await api.get('/products?pageSize=100'); // read base active items for builder dropdown
-      if (prodRes.data.success) setProducts(prodRes.data.data.products);
+      const catRes = await api.get('/categories');
+      if (catRes.data.success) setCategories(catRes.data.data);
+
+      const brandRes = await api.get('/brands');
+      if (brandRes.data.success) setBrands(brandRes.data.data);
     } catch (err) {
       console.error(err);
     } finally {
@@ -93,11 +132,31 @@ const Suppliers: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, [keyword, activeTab]);
+  // Fetch specific supplier details & bills history
+  const fetchSupplierProfile = async (id: string) => {
+    try {
+      const { data } = await api.get(`/suppliers/${id}`);
+      if (data.success) {
+        setSelectedSupplierData(data.data.supplier);
+        setSupplierPurchases(data.data.purchases);
+      }
+    } catch (err) {
+      console.error(err);
+      showError('Failed to load supplier profile.');
+    }
+  };
 
-  // Debounced autocomplete for restocking builder
+  useEffect(() => {
+    fetchSuppliers();
+  }, [keyword]);
+
+  useEffect(() => {
+    if (selectedSupplierId && viewState === 'profile') {
+      fetchSupplierProfile(selectedSupplierId);
+    }
+  }, [selectedSupplierId, viewState]);
+
+  // Debounced product search for bill page
   useEffect(() => {
     const delayDebounce = setTimeout(async () => {
       if (prodSearch.trim().length > 1) {
@@ -114,6 +173,7 @@ const Suppliers: React.FC = () => {
     return () => clearTimeout(delayDebounce);
   }, [prodSearch]);
 
+  // Open Supplier Form Modal (Add or Edit)
   const openSupplierModal = (sup: Supplier | null = null) => {
     setEditSupplier(sup);
     if (sup) {
@@ -123,7 +183,6 @@ const Suppliers: React.FC = () => {
       setEmail(sup.email || '');
       setAddress(sup.address || '');
       setGstin(sup.gstin || '');
-      setOutstandingBalance(sup.outstandingBalance);
     } else {
       setName('');
       setContactPerson('');
@@ -131,30 +190,42 @@ const Suppliers: React.FC = () => {
       setEmail('');
       setAddress('');
       setGstin('');
-      setOutstandingBalance(0);
     }
     setSupplierModal(true);
   };
 
+  // Handle Add/Edit Supplier Submission
   const handleSupplierSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const payload = { name, contactPerson, mobile, email, address, gstin, outstandingBalance };
+    const payload = { name, contactPerson, mobile, email, address, gstin };
     try {
       if (editSupplier) {
         await api.put(`/suppliers/${editSupplier._id}`, payload);
         showSuccess('Supplier details updated successfully!');
       } else {
         await api.post('/suppliers', payload);
-        showSuccess('Supplier directory entry created!');
+        showSuccess('New supplier registered successfully!');
       }
       setSupplierModal(false);
-      fetchData();
+      fetchSuppliers();
+      if (selectedSupplierId) fetchSupplierProfile(selectedSupplierId);
     } catch (err: any) {
-      showError(err.response?.data?.message || 'Save supplier details failed.');
+      showError(err.response?.data?.message || 'Failed to save supplier details.');
     }
   };
 
-  // Add Item to Restocking list
+  // Open Bill Creation Page
+  const startCreateBill = (supplierId?: string) => {
+    const targetSup = supplierId || selectedSupplierId || (suppliers[0]?._id || '');
+    setBillSupplierId(targetSup);
+    setRestockInvoiceNumber(`BILL-${Date.now().toString().slice(-6)}`);
+    setRestockDate(new Date().toISOString().split('T')[0]);
+    setRestockItems([]);
+    setAmountPaid(0);
+    setViewState('create-bill');
+  };
+
+  // Add Item to Bill Sheet
   const addRestockItem = (product: Product) => {
     const exists = restockItems.some(i => i.product === product._id);
     if (exists) return; // avoid duplicates in list
@@ -162,6 +233,7 @@ const Suppliers: React.FC = () => {
     setRestockItems([...restockItems, {
       product: product._id,
       productName: product.name,
+      modelNumber: product.modelNumber,
       quantity: 1,
       purchasePrice: product.purchasePrice,
       gstRate: product.gstRate,
@@ -184,19 +256,103 @@ const Suppliers: React.FC = () => {
     setRestockItems(updated);
   };
 
+  // Open "Add New Item" Popup Modal inside Supplier Bill page
+  const openNewItemModal = () => {
+    setNewItemName('');
+    setNewItemModelNumber('');
+    setNewItemCategory(categories[0]?._id || '');
+    setNewItemBrand(brands[0]?._id || '');
+    setNewItemPurchasePrice('');
+    setNewItemGstRate(18);
+    setNewItemHasIMEI(false);
+    setNewItemModal(true);
+  };
+
+  // Create New Product from Supplier Bill Popup
+  const handleCreateNewItemSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newItemName || !newItemCategory || !newItemBrand || !newItemPurchasePrice) {
+      showError('Please fill out all required item fields.');
+      return;
+    }
+
+    const price = Number(newItemPurchasePrice);
+    const payload = {
+      name: newItemName,
+      modelNumber: newItemModelNumber,
+      category: newItemCategory,
+      brand: newItemBrand,
+      purchasePrice: price,
+      mrp: price, // price restriction: MRP defaults to purchase price
+      sellingPrice: price,
+      gstRate: newItemGstRate,
+      hasIMEI: newItemHasIMEI,
+      stock: 0
+    };
+
+    try {
+      const { data } = await api.post('/products', payload);
+      if (data.success) {
+        showSuccess(`Product "${data.data.name}" created! Automatically added to bill.`);
+        addRestockItem(data.data);
+        setNewItemModal(false);
+      }
+    } catch (err: any) {
+      showError(err.response?.data?.message || 'Failed to create new item.');
+    }
+  };
+
+  // Create Category from Supplier section
+  const handleCategorySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!catName.trim()) {
+      showError('Please enter a category name.');
+      return;
+    }
+    try {
+      await api.post('/categories', { name: catName, description: catDesc });
+      showSuccess(`Category "${catName}" created successfully!`);
+      setCategoryModal(false);
+      setCatName('');
+      setCatDesc('');
+      fetchSuppliers();
+    } catch (err: any) {
+      showError(err.response?.data?.message || 'Category creation failed.');
+    }
+  };
+
+  // Create Brand from Supplier section
+  const handleBrandSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!brandName.trim()) {
+      showError('Please enter a brand name.');
+      return;
+    }
+    try {
+      await api.post('/brands', { name: brandName, description: brandDesc });
+      showSuccess(`Brand "${brandName}" created successfully!`);
+      setBrandModal(false);
+      setBrandName('');
+      setBrandDesc('');
+      fetchSuppliers();
+    } catch (err: any) {
+      showError(err.response?.data?.message || 'Brand creation failed.');
+    }
+  };
+
+  // Calculate Bill Totals (Purchase Price is GST Inclusive)
   const calculateRestockTotals = () => {
     let subtotal = 0;
     let totalGst = 0;
 
     restockItems.forEach(item => {
-      // If IMEI tracked, quantity is determined by IMEI strings parsed!
-      const parsedImeis = item.hasIMEI 
-        ? item.imeiString.split(',').map(i => i.trim()).filter(i => i.length > 0)
-        : [];
-      
-      const qty = item.hasIMEI ? parsedImeis.length : item.quantity;
-      const lineTaxable = qty * item.purchasePrice;
-      const lineGst = (lineTaxable * item.gstRate) / 100;
+      const qty = Math.max(1, Number(item.quantity || 1));
+      const price = Number(item.purchasePrice || 0);
+      const gstRate = Number(item.gstRate || 0);
+
+      const lineTotal = price * qty;
+      const lineTaxable = gstRate > 0 ? lineTotal / (1 + (gstRate / 100)) : lineTotal;
+      const lineGst = lineTotal - lineTaxable;
 
       subtotal += lineTaxable;
       totalGst += lineGst;
@@ -208,47 +364,36 @@ const Suppliers: React.FC = () => {
 
   const restockTotals = calculateRestockTotals();
 
-  // Submit Restocking transaction
+  // Submit Supplier Bill Transaction
   const handleRestockSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSupplier) {
-      showError('Select a wholesale supplier.');
+    if (!billSupplierId) {
+      showError('Select a supplier for this bill.');
       return;
     }
     if (!restockInvoiceNumber) {
-      showError('Enter supplier invoice number.');
+      showError('Enter supplier bill invoice number.');
       return;
     }
     if (restockItems.length === 0) {
-      showError('Add products to restocking sheet.');
+      showError('Add at least one item to the supplier bill.');
       return;
     }
 
-    // Verify all IMEI codes are parsed for serial items
-    for (const item of restockItems) {
-      if (item.hasIMEI) {
-        const parsed = item.imeiString.split(',').map(i => i.trim()).filter(i => i.length > 0);
-        if (parsed.length === 0) {
-          showError(`Specify at least one IMEI serial code for mobile item: ${item.productName}`);
-          return;
-        }
-      }
-    }
-
     const restockPayload = {
-      supplierId: selectedSupplier,
+      supplierId: billSupplierId,
       invoiceNumber: restockInvoiceNumber,
       purchaseDate: restockDate,
-      amountPaid,
+      amountPaid: Number(amountPaid || 0),
       items: restockItems.map(item => {
-        const imeiList = item.hasIMEI
+        const imeiList = item.hasIMEI && item.imeiString
           ? item.imeiString.split(',').map(i => i.trim()).filter(i => i.length > 0)
           : [];
         return {
           product: item.product,
-          quantity: item.hasIMEI ? imeiList.length : item.quantity,
-          purchasePrice: item.purchasePrice,
-          gstRate: item.gstRate,
+          quantity: Math.max(1, Number(item.quantity || 1)),
+          purchasePrice: Number(item.purchasePrice || 0),
+          gstRate: Number(item.gstRate || 0),
           imeiList
         };
       })
@@ -257,68 +402,154 @@ const Suppliers: React.FC = () => {
     try {
       const { data } = await api.post('/suppliers/purchases', restockPayload);
       if (data.success) {
-        showSuccess('Stock received and inventory levels incremented!');
-        // Reset builder state
-        setRestockItems([]);
-        setSelectedSupplier('');
-        setRestockInvoiceNumber('');
-        setAmountPaid(0);
-        setActiveTab('history');
+        showSuccess('Supplier Bill saved! Inventory stock & supplier ledger updated.');
+        // Return to supplier profile or directory
+        if (selectedSupplierId) {
+          fetchSupplierProfile(selectedSupplierId);
+          setViewState('profile');
+        } else {
+          fetchSuppliers();
+          setViewState('directory');
+        }
       }
     } catch (error: any) {
-      showError(error.response?.data?.message || 'Failed to submit restock invoice.');
+      showError(error.response?.data?.message || 'Failed to submit supplier bill.');
+    }
+  };
+
+  // Open Record Payment Modal for a Supplier Bill
+  const openPaymentModal = (bill: PurchaseRecord) => {
+    setSelectedBillForPayment(bill);
+    setPaymentAmount(bill.balanceDue);
+    setPaymentModal(true);
+  };
+
+  // Submit Partial / Full Payment
+  const handlePaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBillForPayment) return;
+
+    const payVal = Number(paymentAmount);
+    if (!payVal || payVal <= 0) {
+      showError('Enter a valid payment amount.');
+      return;
+    }
+
+    try {
+      const { data } = await api.post(`/suppliers/purchases/${selectedBillForPayment._id}/payment`, {
+        paymentAmount: payVal
+      });
+
+      if (data.success) {
+        showSuccess(data.message || 'Payment recorded successfully!');
+        setPaymentModal(false);
+        if (selectedSupplierId) fetchSupplierProfile(selectedSupplierId);
+        fetchSuppliers();
+      }
+    } catch (err: any) {
+      showError(err.response?.data?.message || 'Payment recording failed.');
     }
   };
 
   return (
     <div className="flex-1 p-8 bg-slate-50 dark:bg-slate-950 overflow-y-auto h-screen transition-colors duration-200">
       
-      {/* Header controls */}
+      {/* Toast Notifications */}
+      {errorMsg && (
+        <div className="fixed top-6 right-6 z-50 px-5 py-3.5 bg-rose-500 text-white rounded-2xl shadow-2xl text-xs font-bold flex items-center gap-2 animate-bounce">
+          <AlertCircle size={16} />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+      {successMsg && (
+        <div className="fixed top-6 right-6 z-50 px-5 py-3.5 bg-emerald-500 text-white rounded-2xl shadow-2xl text-xs font-bold flex items-center gap-2 animate-pulse">
+          <CheckCircle2 size={16} />
+          <span>{successMsg}</span>
+        </div>
+      )}
+
+      {/* TOP HEADER CONTROLS */}
       <header className="flex justify-between items-center mb-8">
         <div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-sans">Suppliers & Stocking</h2>
-          <p className="text-slate-500 text-sm">Wholesale suppliers directories, credit lines, and restocking invoices.</p>
-        </div>
-
-        <div className="flex gap-3">
-          {/* Tab selectors */}
-          <div className="bg-slate-200/60 dark:bg-slate-900 p-1.5 rounded-2xl flex border border-slate-300/40 dark:border-slate-800">
-            <button 
-              onClick={() => setActiveTab('suppliers')}
-              className={`px-4 py-2 text-xs font-bold uppercase rounded-xl transition-all ${activeTab === 'suppliers' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
-            >
-              Supplier Directory
-            </button>
-            {isAdmin && (
-              <button 
-                onClick={() => setActiveTab('restock')}
-                className={`px-4 py-2 text-xs font-bold uppercase rounded-xl transition-all ${activeTab === 'restock' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+          <div className="flex items-center gap-3">
+            {viewState !== 'directory' && (
+              <button
+                onClick={() => setViewState('directory')}
+                className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+                title="Back to Supplier Directory"
               >
-                Inward Stock Builder
+                <ArrowLeft size={16} />
               </button>
             )}
-            <button 
-              onClick={() => setActiveTab('history')}
-              className={`px-4 py-2 text-xs font-bold uppercase rounded-xl transition-all ${activeTab === 'history' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
-            >
-              Restock History
-            </button>
+            <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-sans">
+              {viewState === 'directory' ? 'Suppliers Directory' : viewState === 'profile' ? selectedSupplierData?.name || 'Supplier Profile' : 'Create Supplier Bill'}
+            </h2>
           </div>
+          <p className="text-slate-500 text-sm mt-1">
+            {viewState === 'directory' 
+              ? 'Wholesale suppliers directory, credit accounts, and supplier bills.' 
+              : viewState === 'profile'
+                ? 'Supplier ledger, total outstanding balance, and purchase bills.'
+                : 'Direct purchase price entry and dynamic item stock creation.'}
+          </p>
+        </div>
 
-          {activeTab === 'suppliers' && isAdmin && (
+        {/* TOP-RIGHT BUTTONS */}
+        <div className="flex gap-3 items-center">
+          {isAdmin && (
+            <>
+              <button
+                onClick={() => {
+                  setCatName('');
+                  setCatDesc('');
+                  setCategoryModal(true);
+                }}
+                className="px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-2xl text-xs font-bold uppercase text-slate-700 dark:text-slate-200 shadow-sm active:scale-[0.98] transition-all flex items-center gap-2"
+              >
+                <Plus size={14} className="text-teal-500" />
+                <span>Add Category</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setBrandName('');
+                  setBrandDesc('');
+                  setBrandModal(true);
+                }}
+                className="px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-2xl text-xs font-bold uppercase text-slate-700 dark:text-slate-200 shadow-sm active:scale-[0.98] transition-all flex items-center gap-2"
+              >
+                <Plus size={14} className="text-indigo-500" />
+                <span>Add Brand</span>
+              </button>
+            </>
+          )}
+
+          {viewState === 'directory' && isAdmin && (
             <button
               onClick={() => openSupplierModal()}
-              className="px-5 py-3 bg-brand-500 hover:bg-brand-600 rounded-2xl text-xs font-extrabold uppercase text-white shadow-lg shadow-brand-500/20 active:scale-[0.98] transition-all flex items-center gap-2"
+              className="px-5 py-3.5 bg-brand-500 hover:bg-brand-600 rounded-2xl text-xs font-extrabold uppercase text-white shadow-lg shadow-brand-500/20 active:scale-[0.98] transition-all flex items-center gap-2"
             >
-              <Plus size={14} />
-              <span>Create Supplier</span>
+              <Plus size={16} />
+              <span>Add Supplier</span>
+            </button>
+          )}
+
+          {viewState === 'profile' && isAdmin && (
+            <button
+              onClick={() => startCreateBill(selectedSupplierId || undefined)}
+              className="px-5 py-3.5 bg-brand-500 hover:bg-brand-600 rounded-2xl text-xs font-extrabold uppercase text-white shadow-lg shadow-brand-500/20 active:scale-[0.98] transition-all flex items-center gap-2"
+            >
+              <Receipt size={16} />
+              <span>+ Create Supplier Bill</span>
             </button>
           )}
         </div>
       </header>
 
-      {/* SUPPLIER DIRECTORY TAB */}
-      {activeTab === 'suppliers' && (
+      {/* ============================================================ */}
+      {/* 1. SUPPLIER DIRECTORY VIEW */}
+      {/* ============================================================ */}
+      {viewState === 'directory' && (
         <div className="flex flex-col gap-6">
           <div className="relative max-w-md">
             <input
@@ -333,41 +564,57 @@ const Suppliers: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {suppliers.map(sup => (
-              <div key={sup._id} className="p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
+              <div 
+                key={sup._id} 
+                className="p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group"
+                onClick={() => {
+                  setSelectedSupplierId(sup._id);
+                  setViewState('profile');
+                }}
+              >
                 <div className="flex flex-col gap-3">
                   <div className="flex justify-between items-start">
-                    <div className="p-3 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-2xl shrink-0">
-                      <Truck size={20} />
+                    <div className="p-3.5 bg-brand-500/10 text-brand-500 rounded-2xl shrink-0 group-hover:scale-105 transition-transform">
+                      <Building2 size={22} />
                     </div>
                     
                     {sup.outstandingBalance > 0 ? (
                       <div className="px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-[10px] font-bold text-amber-600 dark:text-amber-400">
-                        Balance: ₹{sup.outstandingBalance.toLocaleString('en-IN')}
+                        Outstanding: ₹{sup.outstandingBalance.toLocaleString('en-IN')}
                       </div>
                     ) : (
-                      <div className="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-[10px] font-bold text-slate-500">
-                        Cleared account
+                      <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-[10px] font-bold text-emerald-500">
+                        Cleared Account
                       </div>
                     )}
                   </div>
 
                   <div>
-                    <h3 className="font-extrabold text-base text-slate-900 dark:text-white leading-tight">{sup.name}</h3>
+                    <h3 className="font-extrabold text-lg text-slate-900 dark:text-white leading-tight group-hover:text-brand-500 transition-colors">{sup.name}</h3>
                     <span className="text-[10px] uppercase font-bold text-slate-400">Contact: {sup.contactPerson || 'N/A'}</span>
                   </div>
 
-                  <div className="text-xs text-slate-500 leading-relaxed flex flex-col gap-0.5">
-                    <span>Mobile: {sup.mobile}</span>
-                    <span>GSTIN: {sup.gstin || 'Unregistered'}</span>
-                    <span className="truncate">Address: {sup.address || 'No Address Logged'}</span>
+                  <div className="text-xs text-slate-500 leading-relaxed flex flex-col gap-1 mt-1">
+                    <span className="flex items-center gap-2"><Phone size={12} className="text-slate-400" /> {sup.mobile}</span>
+                    {sup.email && <span className="flex items-center gap-2 truncate"><Mail size={12} className="text-slate-400" /> {sup.email}</span>}
+                    <span className="flex items-center gap-2"><FileText size={12} className="text-slate-400" /> GSTIN: {sup.gstin || 'Unregistered'}</span>
+                    {sup.address && <span className="flex items-center gap-2 truncate"><MapPin size={12} className="text-slate-400" /> {sup.address}</span>}
                   </div>
                 </div>
 
-                <div className="flex gap-2 justify-end pt-4 mt-6 border-t border-slate-100 dark:border-slate-800/80">
+                <div className="flex items-center justify-between pt-4 mt-6 border-t border-slate-100 dark:border-slate-800/80">
+                  <span className="text-xs font-bold text-brand-500 group-hover:underline flex items-center gap-1">
+                    View Profile & Bills →
+                  </span>
+                  
                   {isAdmin && (
                     <button
-                      onClick={() => openSupplierModal(sup)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openSupplierModal(sup);
+                      }}
                       className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-500 transition-colors"
+                      title="Edit Supplier Info"
                     >
                       <Edit size={14} />
                     </button>
@@ -379,21 +626,166 @@ const Suppliers: React.FC = () => {
         </div>
       )}
 
-      {/* RESTOCK BUILDER TAB */}
-      {activeTab === 'restock' && (
+      {/* ============================================================ */}
+      {/* 2. SUPPLIER PROFILE & LEDGER VIEW */}
+      {/* ============================================================ */}
+      {viewState === 'profile' && selectedSupplierData && (
+        <div className="flex flex-col gap-8">
+          
+          {/* Supplier Header Metric Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Account Details */}
+            <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm flex flex-col justify-between">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Supplier Info</span>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white mt-1">{selectedSupplierData.name}</h3>
+                <p className="text-xs text-slate-500 mt-1">Contact: {selectedSupplierData.contactPerson || 'N/A'}</p>
+                <div className="flex flex-col gap-1 mt-3 text-xs text-slate-600 dark:text-slate-400">
+                  <span>Phone: {selectedSupplierData.mobile}</span>
+                  <span>GSTIN: {selectedSupplierData.gstin || 'N/A'}</span>
+                  <span>Address: {selectedSupplierData.address || 'N/A'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Total Bills Metric */}
+            <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm flex items-center justify-between">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Supplier Invoices</span>
+                <span className="text-3xl font-black text-slate-950 dark:text-white">{supplierPurchases.length}</span>
+                <span className="text-[10px] text-slate-400">Bills recorded to date</span>
+              </div>
+              <div className="p-4 bg-blue-500/10 text-blue-500 rounded-2xl">
+                <Receipt size={24} />
+              </div>
+            </div>
+
+            {/* Outstanding Balance Ledger Metric */}
+            <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm flex items-center justify-between">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Outstanding Balance</span>
+                <span className={`text-3xl font-black ${selectedSupplierData.outstandingBalance > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                  ₹{selectedSupplierData.outstandingBalance.toLocaleString('en-IN')}
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  {selectedSupplierData.outstandingBalance > 0 ? 'Amount pending clear' : 'All supplier dues cleared'}
+                </span>
+              </div>
+              <div className={`p-4 rounded-2xl ${selectedSupplierData.outstandingBalance > 0 ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                <CreditCard size={24} />
+              </div>
+            </div>
+          </div>
+
+          {/* Supplier Bills History Table */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+              <div>
+                <h3 className="font-extrabold text-lg text-slate-900 dark:text-white">Supplier Bills & Ledger</h3>
+                <p className="text-xs text-slate-400">Inward inventory invoices and partial payment logs</p>
+              </div>
+
+              <button
+                onClick={() => startCreateBill(selectedSupplierData._id)}
+                className="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold uppercase flex items-center gap-2"
+              >
+                <Plus size={14} />
+                <span>New Supplier Bill</span>
+              </button>
+            </div>
+
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800">
+                  <th className="pos-grid-header">Purchase Date</th>
+                  <th className="pos-grid-header">Invoice #</th>
+                  <th className="pos-grid-header text-right">Items Inward</th>
+                  <th className="pos-grid-header text-right">Total Bill (INR)</th>
+                  <th className="pos-grid-header text-right">Amount Paid</th>
+                  <th className="pos-grid-header text-right">Balance Due</th>
+                  <th className="pos-grid-header text-center">Status</th>
+                  <th className="pos-grid-header text-center">Payment Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {supplierPurchases.length > 0 ? (
+                  supplierPurchases.map(bill => (
+                    <tr key={bill._id} className="pos-grid-row">
+                      <td className="px-4 py-4 text-xs font-bold text-slate-800 dark:text-slate-200">
+                        {new Date(bill.purchaseDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td className="px-4 py-4 text-xs font-bold text-slate-500">
+                        {bill.invoiceNumber}
+                      </td>
+                      <td className="px-4 py-4 text-right text-xs">
+                        {bill.items.reduce((sum, i) => sum + i.quantity, 0)} units
+                      </td>
+                      <td className="px-4 py-4 text-right font-black text-xs text-slate-900 dark:text-white">
+                        ₹{Math.round(bill.totalAmount).toLocaleString('en-IN')}
+                      </td>
+                      <td className="px-4 py-4 text-right text-xs font-bold text-emerald-500">
+                        ₹{Math.round(bill.amountPaid).toLocaleString('en-IN')}
+                      </td>
+                      <td className="px-4 py-4 text-right text-xs font-bold text-rose-500">
+                        ₹{Math.round(bill.balanceDue).toLocaleString('en-IN')}
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full ${
+                          bill.status === 'Paid' 
+                            ? 'bg-emerald-500/10 text-emerald-500' 
+                            : bill.status === 'Partial' 
+                              ? 'bg-amber-500/10 text-amber-500' 
+                              : 'bg-rose-500/10 text-rose-500'
+                        }`}>
+                          {bill.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        {bill.balanceDue > 0 ? (
+                          <button
+                            onClick={() => openPaymentModal(bill)}
+                            className="px-3 py-1.5 bg-brand-500/10 hover:bg-brand-500 text-brand-500 hover:text-white rounded-xl text-xs font-bold transition-all"
+                          >
+                            Record Payment
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-emerald-500 font-bold">✓ Settled</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="text-center py-20 text-slate-400 dark:text-slate-600">
+                      No purchase bills logged for this supplier yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* 3. SUPPLIER BILL CREATION PAGE (Requirement 1: Bill & Price Restriction) */}
+      {/* ============================================================ */}
+      {viewState === 'create-bill' && (
         <form onSubmit={handleRestockSubmit} className="grid grid-cols-1 xl:grid-cols-3 gap-8 text-slate-800 dark:text-slate-200">
           
-          {/* Restock details */}
+          {/* Bill Info & Items Sheet */}
           <div className="xl:col-span-2 flex flex-col gap-6">
+            
+            {/* Header Bill Fields */}
             <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm flex flex-col gap-4">
-              <h3 className="font-extrabold text-base mb-2">Restock Invoice Information</h3>
+              <h3 className="font-extrabold text-base mb-2">Supplier Bill Information</h3>
               
               <div className="grid grid-cols-3 gap-4">
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Select Supplier*</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Supplier Account*</label>
                   <select
-                    value={selectedSupplier}
-                    onChange={(e) => setSelectedSupplier(e.target.value)}
+                    value={billSupplierId}
+                    onChange={(e) => setBillSupplierId(e.target.value)}
                     className="px-3.5 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none cursor-pointer"
                     required
                   >
@@ -403,10 +795,10 @@ const Suppliers: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Purchase Invoice No*</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Supplier Bill Invoice No*</label>
                   <input
                     type="text"
-                    placeholder="e.g. WH-45920"
+                    placeholder="e.g. BILL-94820"
                     value={restockInvoiceNumber}
                     onChange={(e) => setRestockInvoiceNumber(e.target.value)}
                     className="px-3.5 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-brand-500"
@@ -427,16 +819,31 @@ const Suppliers: React.FC = () => {
               </div>
             </div>
 
-            {/* Inward Items Sheet */}
+            {/* Inward Items Sheet with Dynamic Item Creation option */}
             <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm flex flex-col gap-4">
-              <h3 className="font-extrabold text-base">Inward Product Sheet</h3>
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="font-extrabold text-base">Bill Line Items & Inventory Entry</h3>
+                  <p className="text-xs text-slate-400">Select existing items or create new products dynamically</p>
+                </div>
+
+                {/* Requirement 1: Dynamic Item Creation option button */}
+                <button
+                  type="button"
+                  onClick={openNewItemModal}
+                  className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold uppercase shadow-md flex items-center gap-1.5"
+                >
+                  <PackagePlus size={14} />
+                  <span>+ Add New Item</span>
+                </button>
+              </div>
               
-              {/* Product search box */}
-              <div className="relative">
+              {/* Product Search Box */}
+              <div className="relative mt-2">
                 <div className="relative">
                   <input
                     type="text"
-                    placeholder="Search catalog product to inward restock..."
+                    placeholder="Search existing product catalog to add to bill..."
                     value={prodSearch}
                     onChange={(e) => setProdSearch(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none"
@@ -445,28 +852,31 @@ const Suppliers: React.FC = () => {
                 </div>
 
                 {prodResults.length > 0 && (
-                  <div className="absolute top-full left-0 w-full bg-white dark:bg-slate-900 border border-slate-200 mt-1 rounded-xl shadow-xl z-20 overflow-y-auto max-h-48">
+                  <div className="absolute top-full left-0 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 mt-1 rounded-xl shadow-xl z-20 overflow-y-auto max-h-48">
                     {prodResults.map(p => (
                       <button
                         key={p._id}
                         type="button"
                         onClick={() => addRestockItem(p)}
-                        className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-xs font-semibold border-b border-slate-100"
+                        className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-xs font-semibold border-b border-slate-100 dark:border-slate-800 flex justify-between"
                       >
-                        {p.name} (SKU: {p.sku} | Cost: ₹{p.purchasePrice})
+                        <span>{p.name} {p.modelNumber ? `(${p.modelNumber})` : ''}</span>
+                        <span className="text-brand-500 font-bold">Purchase Price: ₹{p.purchasePrice}</span>
                       </button>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* Items grid */}
+              {/* Bill Items Grid (Price Restriction: ONLY Purchase Price displayed) */}
               <div className="flex flex-col gap-4 mt-2">
                 {restockItems.length > 0 ? (
                   restockItems.map((item, idx) => (
                     <div key={item.product} className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800/80 rounded-2xl flex flex-col gap-3">
                       <div className="flex justify-between items-center">
-                        <span className="text-xs font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5"><CornerDownRight size={12} className="text-slate-400" /> {item.productName}</span>
+                        <span className="text-xs font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
+                          <CornerDownRight size={12} className="text-slate-400" /> {item.productName} {item.modelNumber ? `[${item.modelNumber}]` : ''}
+                        </span>
                         <button
                           type="button"
                           onClick={() => removeRestockItem(idx)}
@@ -476,26 +886,28 @@ const Suppliers: React.FC = () => {
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-4 gap-4">
+                      <div className="grid grid-cols-3 gap-4">
+                        {/* Direct Inventory Entry (Qty) */}
                         <div className="flex flex-col gap-1">
-                          <label className="text-[9px] font-bold text-slate-400 uppercase">Unit Cost (INR)</label>
+                          <label className="text-[9px] font-bold text-slate-400 uppercase">Direct Inventory Qty*</label>
                           <input
                             type="number"
-                            value={item.purchasePrice}
-                            onChange={(e) => updateRestockItemField(idx, 'purchasePrice', Number(e.target.value))}
-                            className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none"
+                            value={item.quantity}
+                            onChange={(e) => updateRestockItemField(idx, 'quantity', Math.max(1, Number(e.target.value)))}
+                            min={1}
+                            className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none font-bold text-slate-900 dark:text-white"
                             required
                           />
                         </div>
 
+                        {/* PRICE RESTRICTION: Purchase Price Only (GST Inclusive) */}
                         <div className="flex flex-col gap-1">
-                          <label className="text-[9px] font-bold text-slate-400 uppercase">Inward Qty</label>
+                          <label className="text-[9px] font-bold text-slate-400 uppercase">Purchase Price (GST Incl.)*</label>
                           <input
                             type="number"
-                            value={item.quantity}
-                            onChange={(e) => updateRestockItemField(idx, 'quantity', Number(e.target.value))}
-                            disabled={item.hasIMEI}
-                            className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none disabled:opacity-40"
+                            value={item.purchasePrice}
+                            onChange={(e) => updateRestockItemField(idx, 'purchasePrice', Number(e.target.value))}
+                            className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none font-bold"
                             required
                           />
                         </div>
@@ -506,14 +918,16 @@ const Suppliers: React.FC = () => {
                             type="number"
                             value={item.gstRate}
                             onChange={(e) => updateRestockItemField(idx, 'gstRate', Number(e.target.value))}
-                            className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none"
+                            className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none"
                             required
                           />
                         </div>
 
                         {item.hasIMEI && (
-                          <div className="col-span-4 mt-1 flex flex-col gap-1 animate-scaleUp">
-                            <label className="text-[9px] font-bold text-cyan-500 uppercase flex items-center gap-1"><Barcode size={10} /> Incoming Serial / IMEI Numbers (Comma Separated)</label>
+                          <div className="col-span-3 mt-1 flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-cyan-500 uppercase flex items-center gap-1">
+                              <Barcode size={10} /> Incoming Serial / IMEI Numbers (Comma Separated)
+                            </label>
                             <input
                               type="text"
                               placeholder="e.g. 86904501, 86904502"
@@ -523,7 +937,7 @@ const Suppliers: React.FC = () => {
                               required
                             />
                             <span className="text-[9px] text-cyan-600 dark:text-cyan-400 font-bold">
-                              Parsed {item.imeiString.split(',').map(i => i.trim()).filter(i => i.length > 0).length} IMEIs. This count locked the Inward Qty.
+                              Parsed {item.imeiString.split(',').map(i => i.trim()).filter(i => i.length > 0).length} IMEIs.
                             </span>
                           </div>
                         )}
@@ -532,29 +946,31 @@ const Suppliers: React.FC = () => {
                   ))
                 ) : (
                   <div className="py-12 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl text-center text-slate-400">
-                    <span className="text-xs font-semibold">Product list is blank. Add items above to receive stock.</span>
+                    <span className="text-xs font-semibold">Bill item list is empty. Click "+ Add New Item" or search catalog above.</span>
                   </div>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Checkout & summary column */}
+          {/* Checkout & Summary Column */}
           <div className="flex flex-col gap-6">
             <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm">
-              <h3 className="font-extrabold text-base mb-4 flex items-center gap-2 text-slate-800 dark:text-slate-200 uppercase tracking-wider"><Calculator size={16} /> Calculations Summary</h3>
+              <h3 className="font-extrabold text-base mb-4 flex items-center gap-2 text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                <Calculator size={16} /> Bill Summary
+              </h3>
               
               <div className="flex flex-col gap-3 text-xs text-slate-500 mb-6">
                 <div className="flex justify-between">
-                  <span>Gross Subtotal:</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">₹{restockTotals.subtotal.toLocaleString('en-IN')}</span>
+                  <span>Taxable Subtotal:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">₹{restockTotals.subtotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Tax Amount (GST):</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">₹{restockTotals.gst.toLocaleString('en-IN')}</span>
+                  <span>GST Amount (Included):</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">₹{restockTotals.gst.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex justify-between border-t border-slate-100 dark:border-slate-800 pt-3">
-                  <span className="font-bold text-slate-900 dark:text-white">Wholesale Total:</span>
+                  <span className="font-bold text-slate-900 dark:text-white">Total Bill Amount:</span>
                   <span className="font-extrabold text-sm text-brand-500">₹{Math.round(restockTotals.total).toLocaleString('en-IN')}</span>
                 </div>
               </div>
@@ -565,13 +981,13 @@ const Suppliers: React.FC = () => {
                   type="number"
                   value={amountPaid}
                   onChange={(e) => setAmountPaid(Number(e.target.value))}
-                  className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none"
+                  className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none font-bold"
                 />
                 
                 {amountPaid < Math.round(restockTotals.total) && (
                   <div className="mt-1 flex flex-col text-[10px] font-bold text-amber-600 dark:text-amber-400 gap-0.5">
-                    <span>Outstanding Due: ₹{Math.max(0, Math.round(restockTotals.total) - amountPaid).toLocaleString('en-IN')}</span>
-                    <span className="text-[8px] text-slate-400">(This amount adds to supplier accounts outstanding balance)</span>
+                    <span>Balance Due Owed: ₹{Math.max(0, Math.round(restockTotals.total) - amountPaid).toLocaleString('en-IN')}</span>
+                    <span className="text-[8px] text-slate-400">(Adds to supplier outstanding ledger)</span>
                   </div>
                 )}
               </div>
@@ -581,8 +997,8 @@ const Suppliers: React.FC = () => {
                 disabled={restockItems.length === 0}
                 className="w-full py-4 bg-brand-500 hover:bg-brand-600 disabled:bg-slate-200 disabled:dark:bg-slate-800 font-bold text-white text-xs uppercase rounded-2xl shadow-xl shadow-brand-500/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
               >
-                <Receipt size={14} />
-                <span>Lock Inward & Receive Stock</span>
+                <Receipt size={16} />
+                <span>Save Supplier Bill & Sync Stock</span>
               </button>
             </div>
           </div>
@@ -590,75 +1006,19 @@ const Suppliers: React.FC = () => {
         </form>
       )}
 
-      {/* RESTOCK INVOICES LIST (HISTORY) */}
-      {activeTab === 'history' && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-800">
-                <th className="pos-grid-header">Receive Date</th>
-                <th className="pos-grid-header">Supplier</th>
-                <th className="pos-grid-header">Invoice Number</th>
-                <th className="pos-grid-header text-right">Items Inward</th>
-                <th className="pos-grid-header text-right">Total Cost</th>
-                <th className="pos-grid-header text-right">Balance Due</th>
-                <th className="pos-grid-header text-center">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {purchases.length > 0 ? (
-                purchases.map(p => (
-                  <tr 
-                    key={p._id} 
-                    className="pos-grid-row cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-850 transition-colors"
-                    onClick={() => setSelectedPurchase(p)}
-                  >
-                    <td className="px-4 py-4 text-xs font-bold text-slate-800 dark:text-slate-200">
-                      {new Date(p.purchaseDate).toLocaleDateString('en-IN')}
-                    </td>
-                    <td className="px-4 py-4 text-xs font-semibold text-slate-900 dark:text-white">
-                      {p.supplier ? p.supplier.name : 'Unknown Supplier'}
-                    </td>
-                    <td className="px-4 py-4 text-xs font-bold text-slate-500">
-                      {p.invoiceNumber}
-                    </td>
-                    <td className="px-4 py-4 text-right text-xs">
-                      {p.items.reduce((sum, i) => sum + i.quantity, 0)} units
-                    </td>
-                    <td className="px-4 py-4 text-right font-black text-xs text-slate-900 dark:text-white">
-                      ₹{Math.round(p.totalAmount).toLocaleString('en-IN')}
-                    </td>
-                    <td className="px-4 py-4 text-right text-xs font-bold text-rose-500">
-                      ₹{Math.round(p.balanceDue).toLocaleString('en-IN')}
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                      <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full ${p.status === 'Paid' ? 'bg-emerald-500/10 text-emerald-500' : p.status === 'Partial' ? 'bg-amber-500/10 text-amber-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                        {p.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={7} className="text-center py-20 text-slate-400 dark:text-slate-600">
-                    No purchase history registered.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {/* ============================================================ */}
+      {/* 4. MODALS */}
+      {/* ============================================================ */}
 
-      {/* SUPPLIER MODAL FORM */}
+      {/* A. ADD / EDIT SUPPLIER MODAL */}
       {supplierModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <form 
             onSubmit={handleSupplierSubmit}
-            className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 flex flex-col gap-4 animate-scaleUp text-slate-800 dark:text-slate-200"
+            className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 flex flex-col gap-4 text-slate-800 dark:text-slate-200 animate-scaleUp"
           >
             <h3 className="text-lg font-black text-slate-900 dark:text-white">
-              {editSupplier ? 'Edit Supplier Profile' : 'Create Supplier profile'}
+              {editSupplier ? 'Edit Supplier Profile' : 'Register New Supplier'}
             </h3>
 
             <div className="grid grid-cols-2 gap-4">
@@ -674,7 +1034,7 @@ const Suppliers: React.FC = () => {
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold uppercase text-slate-400">Contact Person Name</label>
+                <label className="text-[10px] font-bold uppercase text-slate-400">Contact Person</label>
                 <input
                   type="text"
                   value={contactPerson}
@@ -684,7 +1044,7 @@ const Suppliers: React.FC = () => {
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold uppercase text-slate-400">Mobile number*</label>
+                <label className="text-[10px] font-bold uppercase text-slate-400">Mobile Number*</label>
                 <input
                   type="text"
                   value={mobile}
@@ -695,7 +1055,7 @@ const Suppliers: React.FC = () => {
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold uppercase text-slate-400">GSTIN number</label>
+                <label className="text-[10px] font-bold uppercase text-slate-400">GSTIN Number</label>
                 <input
                   type="text"
                   value={gstin}
@@ -724,167 +1084,350 @@ const Suppliers: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex gap-4 mt-6 justify-end">
+            <div className="flex gap-4 mt-4 justify-end">
               <button
                 type="button"
                 onClick={() => setSupplierModal(false)}
-                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold text-xs uppercase"
+                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 rounded-xl font-bold text-xs uppercase"
               >
-                Discard
+                Cancel
               </button>
               <button
                 type="submit"
                 className="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold text-xs uppercase"
               >
-                Save Profile
+                Save Supplier
               </button>
             </div>
-
           </form>
         </div>
       )}
 
-      {/* RESTOCK INVOICE DETAILS MODAL */}
-      {selectedPurchase && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedPurchase(null)}>
-          <div 
-            className="w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 flex flex-col gap-5 animate-scaleUp text-slate-800 dark:text-slate-200 max-h-[85vh] overflow-y-auto"
-            onClick={e => e.stopPropagation()}
+      {/* B. DYNAMIC NEW ITEM POPUP MODAL (Requirement 1: Purchase Price Only) */}
+      {newItemModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form 
+            onSubmit={handleCreateNewItemSubmit}
+            className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 flex flex-col gap-4 text-slate-800 dark:text-slate-200 animate-scaleUp"
           >
-            <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800/80 pb-4">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-slate-400">Invoice Restock Record</span>
-                <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  Invoice: {selectedPurchase.invoiceNumber}
-                </h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full ${
-                  selectedPurchase.status === 'Paid' 
-                    ? 'bg-emerald-500/10 text-emerald-500' 
-                    : selectedPurchase.status === 'Partial' 
-                      ? 'bg-amber-500/10 text-amber-500' 
-                      : 'bg-rose-500/10 text-rose-500'
-                }`}>
-                  {selectedPurchase.status}
-                </span>
-                <button 
-                  onClick={() => setSelectedPurchase(null)}
-                  className="p-1 hover:bg-slate-100 dark:hover:bg-slate-850 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            {/* Supplier Info */}
-            <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-950/40 p-4 rounded-2xl border border-slate-100 dark:border-slate-850 text-xs">
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-bold uppercase text-slate-400">Supplier Name</span>
-                <span className="font-bold text-slate-900 dark:text-white">{selectedPurchase.supplier ? selectedPurchase.supplier.name : 'Unknown Supplier'}</span>
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-bold uppercase text-slate-400">Contact Person</span>
-                <span className="font-semibold">{selectedPurchase.supplier?.contactPerson || 'N/A'}</span>
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-bold uppercase text-slate-400">Mobile Number</span>
-                <span className="font-semibold">{selectedPurchase.supplier?.mobile || 'N/A'}</span>
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-bold uppercase text-slate-400">Purchase Date</span>
-                <span className="font-semibold">{new Date(selectedPurchase.purchaseDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-              </div>
-            </div>
-
-            {/* Inward Items */}
-            <div className="flex flex-col gap-2">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Inward Items List</h4>
-              <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden bg-white dark:bg-slate-900">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-950/50 border-b border-slate-250 dark:border-slate-850 text-[10px] font-bold text-slate-500 uppercase">
-                      <th className="px-3 py-2.5">Product</th>
-                      <th className="px-3 py-2.5 text-right">Cost Price</th>
-                      <th className="px-3 py-2.5 text-center">Qty</th>
-                      <th className="px-3 py-2.5 text-right">Tax (GST)</th>
-                      <th className="px-3 py-2.5 text-right">Line Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-850 text-xs">
-                    {selectedPurchase.items.map((item: any, idx: number) => {
-                      const lineTaxable = item.quantity * item.purchasePrice;
-                      const lineGst = (lineTaxable * (item.gstRate || 0)) / 100;
-                      const lineTotal = lineTaxable + lineGst;
-                      return (
-                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-850/40">
-                          <td className="px-3 py-3">
-                            <div className="flex flex-col gap-0.5">
-                              <span className="font-bold text-slate-900 dark:text-white">{item.product ? item.product.name : 'Deleted Product'}</span>
-                              <span className="text-[9px] text-slate-400 font-mono">SKU: {item.product?.sku || 'N/A'}</span>
-                              {item.imeiList && item.imeiList.length > 0 && (
-                                <div className="mt-1.5 flex flex-wrap gap-1">
-                                  {item.imeiList.map((im: string) => (
-                                    <span key={im} className="px-1.5 py-0.5 bg-cyan-500/10 text-cyan-500 dark:text-cyan-400 text-[8px] font-bold rounded-md font-mono border border-cyan-500/10">
-                                      {im}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-3 py-3 text-right font-semibold">₹{item.purchasePrice.toLocaleString('en-IN')}</td>
-                          <td className="px-3 py-3 text-center font-bold">{item.quantity}</td>
-                          <td className="px-3 py-3 text-right text-slate-500">₹{Math.round(lineGst).toLocaleString('en-IN')} ({item.gstRate}%)</td>
-                          <td className="px-3 py-3 text-right font-black text-slate-900 dark:text-white">₹{Math.round(lineTotal).toLocaleString('en-IN')}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Calculations Summary */}
-            <div className="flex justify-between items-start border-t border-slate-100 dark:border-slate-800/80 pt-4 text-xs">
-              <div className="text-slate-400 space-y-1">
-                <div>Subtotal: <span className="font-semibold text-slate-700 dark:text-slate-300">₹{Math.round(selectedPurchase.subtotal).toLocaleString('en-IN')}</span></div>
-                <div>GST Tax: <span className="font-semibold text-slate-700 dark:text-slate-300">₹{Math.round(selectedPurchase.totalGst).toLocaleString('en-IN')}</span></div>
-              </div>
-              <div className="text-right space-y-1.5">
-                <div>Total Cost: <span className="font-black text-sm text-slate-900 dark:text-white">₹{Math.round(selectedPurchase.totalAmount).toLocaleString('en-IN')}</span></div>
-                <div>Paid Upfront: <span className="font-bold text-emerald-500">₹{Math.round(selectedPurchase.amountPaid).toLocaleString('en-IN')}</span></div>
-                <div className="border-t border-slate-100 dark:border-slate-850 pt-1.5">
-                  Balance Due: <span className="font-black text-rose-500">₹{Math.round(selectedPurchase.balanceDue).toLocaleString('en-IN')}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                onClick={() => setSelectedPurchase(null)}
-                className="px-6 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold text-xs uppercase"
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <PackagePlus size={20} className="text-emerald-500" />
+                Add New Item / Model
+              </h3>
+              <button 
+                type="button"
+                onClick={() => setNewItemModal(false)}
+                className="text-slate-400 hover:text-slate-600"
               >
-                Close details
+                ✕
               </button>
             </div>
-          </div>
+
+            <p className="text-xs text-slate-500">Dynamically add mobile phones, models, or accessories directly into inventory.</p>
+
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold uppercase text-slate-400">Item Name / Phone Name*</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Galaxy S24 Ultra"
+                  value={newItemName}
+                  onChange={(e) => setNewItemName(e.target.value)}
+                  className="px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-brand-500"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold uppercase text-slate-400">Model Name / Number</label>
+                <input
+                  type="text"
+                  placeholder="e.g. SM-S928B"
+                  value={newItemModelNumber}
+                  onChange={(e) => setNewItemModelNumber(e.target.value)}
+                  className="px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold uppercase text-slate-400">Category*</label>
+                  <select
+                    value={newItemCategory}
+                    onChange={(e) => setNewItemCategory(e.target.value)}
+                    className="px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none cursor-pointer"
+                    required
+                  >
+                    {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold uppercase text-slate-400">Brand / Company*</label>
+                  <select
+                    value={newItemBrand}
+                    onChange={(e) => setNewItemBrand(e.target.value)}
+                    className="px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none cursor-pointer"
+                    required
+                  >
+                    {brands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* PRICE RESTRICTION: Purchase Price Only Required & Displayed */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold uppercase text-brand-500">Purchase Price (INR)*</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 75000"
+                    value={newItemPurchasePrice}
+                    onChange={(e) => setNewItemPurchasePrice(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none font-bold"
+                    required
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold uppercase text-slate-400">GST Rate (%)</label>
+                  <input
+                    type="number"
+                    value={newItemGstRate}
+                    onChange={(e) => setNewItemGstRate(Number(e.target.value))}
+                    className="px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer mt-2">
+                <input
+                  type="checkbox"
+                  checked={newItemHasIMEI}
+                  onChange={(e) => setNewItemHasIMEI(e.target.checked)}
+                  className="w-4 h-4 rounded text-brand-500 focus:ring-brand-500"
+                />
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Requires Serial / IMEI Tracking</span>
+              </label>
+            </div>
+
+            <div className="flex gap-4 mt-4 justify-end">
+              <button
+                type="button"
+                onClick={() => setNewItemModal(false)}
+                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-bold text-xs uppercase"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase shadow-md"
+              >
+                Add Item to Bill
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
-      {/* TOAST NOTIFICATIONS */}
-      {errorMsg && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] px-6 py-3.5 bg-rose-500 text-white rounded-2xl shadow-2xl shadow-rose-500/30 text-sm font-bold flex items-center gap-3 animate-scaleUp">
-          <span className="text-base">⚠</span>
-          <span>{errorMsg}</span>
-          <button onClick={() => setErrorMsg('')} className="ml-2 text-white/70 hover:text-white font-black text-xs">✕</button>
+      {/* C. RECORD PAYMENT MODAL (Requirement 1: Outstanding Payments & Partial Payment) */}
+      {paymentModal && selectedBillForPayment && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form 
+            onSubmit={handlePaymentSubmit}
+            className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 flex flex-col gap-4 text-slate-800 dark:text-slate-200 animate-scaleUp"
+          >
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <CreditCard size={20} className="text-brand-500" />
+                Record Supplier Payment
+              </h3>
+              <button 
+                type="button"
+                onClick={() => setPaymentModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-850 flex flex-col gap-1.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Bill Invoice #:</span>
+                <span className="font-bold text-slate-900 dark:text-white">{selectedBillForPayment.invoiceNumber}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Total Bill Amount:</span>
+                <span className="font-bold">₹{Math.round(selectedBillForPayment.totalAmount).toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Already Paid:</span>
+                <span className="font-bold text-emerald-500">₹{Math.round(selectedBillForPayment.amountPaid).toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between border-t border-slate-200 dark:border-slate-800 pt-1.5 font-bold">
+                <span className="text-rose-500">Current Balance Due:</span>
+                <span className="text-rose-500">₹{Math.round(selectedBillForPayment.balanceDue).toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-bold uppercase text-slate-400">Payment Amount Owed (INR)*</label>
+              <input
+                type="number"
+                placeholder="Enter amount to pay"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                max={selectedBillForPayment.balanceDue}
+                className="px-3.5 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm outline-none font-bold text-brand-500"
+                required
+              />
+              <span className="text-[9px] text-slate-400">
+                Support partial payments. Enter full or partial amount to update supplier ledger balance.
+              </span>
+            </div>
+
+            <div className="flex gap-4 mt-4 justify-end">
+              <button
+                type="button"
+                onClick={() => setPaymentModal(false)}
+                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-bold text-xs uppercase"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold text-xs uppercase shadow-md"
+              >
+                Confirm Payment
+              </button>
+            </div>
+          </form>
         </div>
       )}
-      {successMsg && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] px-6 py-3.5 bg-emerald-500 text-white rounded-2xl shadow-2xl shadow-emerald-500/30 text-sm font-bold flex items-center gap-3 animate-scaleUp">
-          <span className="text-base">✓</span>
-          <span>{successMsg}</span>
-          <button onClick={() => setSuccessMsg('')} className="ml-2 text-white/70 hover:text-white font-black text-xs">✕</button>
+
+      {/* CATEGORY DIALOG MODAL */}
+      {categoryModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form 
+            onSubmit={handleCategorySubmit}
+            className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 flex flex-col gap-4 animate-scaleUp text-slate-800 dark:text-slate-200"
+          >
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Layers size={20} className="text-teal-500" />
+                Create New Category
+              </h3>
+              <button 
+                type="button"
+                onClick={() => setCategoryModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold uppercase text-slate-400">Category Name*</label>
+              <input
+                type="text"
+                placeholder="e.g. Smart Phones, Accessories, Chargers"
+                value={catName}
+                onChange={(e) => setCatName(e.target.value)}
+                className="px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-brand-500"
+                required
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold uppercase text-slate-400">Description</label>
+              <textarea
+                placeholder="Optional description"
+                value={catDesc}
+                onChange={(e) => setCatDesc(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-brand-500 h-20"
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end mt-4">
+              <button
+                type="button"
+                onClick={() => setCategoryModal(false)}
+                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold text-xs uppercase"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2.5 bg-teal-500 hover:bg-teal-600 text-white rounded-xl font-bold text-xs uppercase shadow-md shadow-teal-500/20"
+              >
+                Save Category
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* BRAND DIALOG MODAL */}
+      {brandModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form 
+            onSubmit={handleBrandSubmit}
+            className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 flex flex-col gap-4 animate-scaleUp text-slate-800 dark:text-slate-200"
+          >
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Tag size={20} className="text-indigo-500" />
+                Create New Brand
+              </h3>
+              <button 
+                type="button"
+                onClick={() => setBrandModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold uppercase text-slate-400">Brand Name*</label>
+              <input
+                type="text"
+                placeholder="e.g. Apple, Samsung, OnePlus, Boat"
+                value={brandName}
+                onChange={(e) => setBrandName(e.target.value)}
+                className="px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-brand-500"
+                required
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold uppercase text-slate-400">Description</label>
+              <textarea
+                placeholder="Optional description"
+                value={brandDesc}
+                onChange={(e) => setBrandDesc(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-brand-500 h-20"
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end mt-4">
+              <button
+                type="button"
+                onClick={() => setBrandModal(false)}
+                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold text-xs uppercase"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-bold text-xs uppercase shadow-md shadow-indigo-500/20"
+              >
+                Save Brand
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

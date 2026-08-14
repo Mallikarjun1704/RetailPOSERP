@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Lock, User as UserIcon, Laptop, Sparkles, UserPlus } from 'lucide-react';
 import api from '../utils/api';
+import TMLogo from '../components/TMLogo';
 
 const Login: React.FC = () => {
   const { login, registerUser, user } = useAuth();
@@ -123,9 +124,7 @@ const Login: React.FC = () => {
 
       <div className="w-full max-w-md p-8 bg-slate-950/60 border border-slate-800/80 backdrop-blur-xl rounded-3xl shadow-2xl flex flex-col items-center">
         {/* Brand logo details */}
-        <div className="p-3 bg-brand-500 rounded-2xl text-white shadow-xl shadow-brand-500/30 mb-4">
-          <Laptop size={32} />
-        </div>
+        <TMLogo size="xl" className="mb-4" />
         <h2 className="text-2xl font-black text-white tracking-tight">TECH MART SALES & SERVICE</h2>
         <p className="text-xs font-semibold uppercase tracking-widest text-brand-400 mb-6">RetailPOS Offline ERP</p>
 

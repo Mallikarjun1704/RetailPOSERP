@@ -25,22 +25,26 @@ export const getDashboardStats = async (req, res) => {
       status: 'Paid'
     });
 
+    // 2b. Fetch All Paid Invoices
+    const allPaidInvoices = await Invoice.find({ status: 'Paid' });
+
     // 3. Compute sales figures
     const todaySales = todayInvoices.reduce((sum, inv) => sum + inv.finalAmount, 0);
     const monthlySales = monthlyInvoices.reduce((sum, inv) => sum + inv.finalAmount, 0);
     const monthlyRevenue = monthlyInvoices.reduce((sum, inv) => sum + inv.subtotal, 0);
+    const totalSales = allPaidInvoices.reduce((sum, inv) => sum + inv.finalAmount, 0);
 
-    // 4. Compute Net Profits (Sales Price - Purchase Price - Item Discounts)
-    // We will query purchase cost dynamically from invoice item snapshots
+    // 4. Compute Net Profits (Sales Total Revenue - Wholesale Purchase Cost)
     let todayProfit = 0;
     for (const inv of todayInvoices) {
       for (const item of inv.items) {
         const product = await Product.findById(item.product);
-        const cost = product ? product.purchasePrice : item.sellingPrice * 0.8; // Fallback
-        
-        // Taxable income = selling price after item discount (backcalculated taxable value)
-        const profitPerItem = item.taxableAmount - (cost * item.quantity);
-        todayProfit += profitPerItem;
+        const costPerUnit = (product && product.purchasePrice > 0) 
+          ? product.purchasePrice 
+          : (item.sellingPrice ? item.sellingPrice * 0.7 : item.finalPrice / item.quantity * 0.7);
+        const itemSellingTotal = item.finalPrice || (item.sellingPrice * item.quantity);
+        const itemCostTotal = costPerUnit * item.quantity;
+        todayProfit += Math.max(0, itemSellingTotal - itemCostTotal);
       }
     }
 
@@ -48,9 +52,25 @@ export const getDashboardStats = async (req, res) => {
     for (const inv of monthlyInvoices) {
       for (const item of inv.items) {
         const product = await Product.findById(item.product);
-        const cost = product ? product.purchasePrice : item.sellingPrice * 0.8; // Fallback
-        const profitPerItem = item.taxableAmount - (cost * item.quantity);
-        monthlyProfit += profitPerItem;
+        const costPerUnit = (product && product.purchasePrice > 0) 
+          ? product.purchasePrice 
+          : (item.sellingPrice ? item.sellingPrice * 0.7 : item.finalPrice / item.quantity * 0.7);
+        const itemSellingTotal = item.finalPrice || (item.sellingPrice * item.quantity);
+        const itemCostTotal = costPerUnit * item.quantity;
+        monthlyProfit += Math.max(0, itemSellingTotal - itemCostTotal);
+      }
+    }
+
+    let totalProfit = 0;
+    for (const inv of allPaidInvoices) {
+      for (const item of inv.items) {
+        const product = await Product.findById(item.product);
+        const costPerUnit = (product && product.purchasePrice > 0) 
+          ? product.purchasePrice 
+          : (item.sellingPrice ? item.sellingPrice * 0.7 : item.finalPrice / item.quantity * 0.7);
+        const itemSellingTotal = item.finalPrice || (item.sellingPrice * item.quantity);
+        const itemCostTotal = costPerUnit * item.quantity;
+        totalProfit += Math.max(0, itemSellingTotal - itemCostTotal);
       }
     }
 
@@ -72,6 +92,8 @@ export const getDashboardStats = async (req, res) => {
         monthlyRevenue: Math.round(monthlyRevenue),
         todayProfit: Math.round(todayProfit),
         monthlyProfit: Math.round(monthlyProfit),
+        totalSales: Math.round(totalSales),
+        totalProfit: Math.round(totalProfit),
         lowStockAlerts,
         recentInvoices
       }
@@ -114,13 +136,16 @@ export const getDashboardChartData = async (req, res) => {
       let invProfit = 0;
       for (const item of inv.items) {
         const product = await Product.findById(item.product);
-        const cost = product ? product.purchasePrice : item.sellingPrice * 0.8;
-        invProfit += item.taxableAmount - (cost * item.quantity);
+        const costPerUnit = (product && product.purchasePrice > 0) 
+          ? product.purchasePrice 
+          : (item.sellingPrice ? item.sellingPrice * 0.7 : item.finalPrice / item.quantity * 0.7);
+        const itemSellingTotal = item.finalPrice || (item.sellingPrice * item.quantity);
+        invProfit += Math.max(0, itemSellingTotal - (costPerUnit * item.quantity));
       }
 
       if (dailyData[dateStr]) {
         dailyData[dateStr].sales += inv.finalAmount;
-        dailyData[dateStr].profit += invProfit;
+        dailyData[dateStr].profit += Math.round(invProfit);
       }
     }
 
@@ -175,12 +200,12 @@ export const getSalesReport = async (req, res) => {
 
       for (const item of inv.items) {
         const product = await Product.findById(item.product);
-        const cost = product ? product.purchasePrice : item.sellingPrice * 0.8;
-        totalCostOfGoods += (cost * item.quantity);
+        const costPerUnit = (product && product.purchasePrice > 0) ? product.purchasePrice : (item.sellingPrice ? item.sellingPrice * 0.7 : item.finalPrice / item.quantity * 0.7);
+        totalCostOfGoods += (costPerUnit * item.quantity);
       }
     }
 
-    const totalProfit = totalTaxable - totalCostOfGoods;
+    const totalProfit = totalSales - totalCostOfGoods;
 
     res.json({
       success: true,

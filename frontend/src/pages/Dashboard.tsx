@@ -90,6 +90,20 @@ const Dashboard: React.FC = () => {
       desc: "Net accumulated earnings this month",
       icon: Percent,
       color: "bg-teal-500 text-white shadow-teal-500/20"
+    },
+    {
+      title: "Total Sales",
+      value: `₹${stats?.totalSales?.toLocaleString('en-IN') || 0}`,
+      desc: "All-time gross sales revenue",
+      icon: DollarSign,
+      color: "bg-indigo-500 text-white shadow-indigo-500/20"
+    },
+    {
+      title: "Total Profit",
+      value: `₹${stats?.totalProfit?.toLocaleString('en-IN') || 0}`,
+      desc: "All-time net cumulative earnings",
+      icon: PackageCheck,
+      color: "bg-purple-500 text-white shadow-purple-500/20"
     }
   ];
 
@@ -111,25 +125,25 @@ const Dashboard: React.FC = () => {
       </header>
 
       {/* KPI Cards Grid */}
-      <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+      <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-6 mb-8">
         {kpis.map((kpi, idx) => (
           <div key={idx} className="p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm hover:shadow-md transition-shadow duration-200 flex items-center justify-between">
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{kpi.title}</span>
-              <span className="text-2xl font-black text-slate-950 dark:text-white font-sans">{kpi.value}</span>
+              <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{kpi.title}</span>
+              <span className="text-xl font-black text-slate-950 dark:text-white font-sans">{kpi.value}</span>
               <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">{kpi.desc}</span>
             </div>
-            <div className={`p-4 rounded-2xl shadow-lg shrink-0 ${kpi.color}`}>
-              <kpi.icon size={22} />
+            <div className={`p-3.5 rounded-2xl shadow-lg shrink-0 ${kpi.color}`}>
+              <kpi.icon size={20} />
             </div>
           </div>
         ))}
       </section>
 
-      {/* Charts & Warning Grid */}
-      <section className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+      {/* Charts Grid */}
+      <section className="w-full">
         {/* Sales Chart Area */}
-        <div className="xl:col-span-2 p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm">
+        <div className="w-full p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm">
           <div className="flex justify-between items-center mb-6">
             <div>
               <h3 className="font-extrabold text-lg text-slate-900 dark:text-white">Revenue & Profits</h3>
@@ -141,7 +155,7 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="h-80 w-full">
+          <div className="h-96 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
@@ -166,40 +180,6 @@ const Dashboard: React.FC = () => {
                 <Area type="monotone" dataKey="profit" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorProfit)" />
               </AreaChart>
             </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Recent Invoices list */}
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm flex flex-col">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-xl shrink-0">
-              <Clock size={16} />
-            </div>
-            <div>
-              <h3 className="font-extrabold text-lg text-slate-900 dark:text-white">Recent Purchases</h3>
-              <p className="text-xs text-slate-400">Invoices cleared on the POS system</p>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-4 overflow-y-auto flex-1 max-h-[300px] pr-1">
-            {stats?.recentInvoices && stats.recentInvoices.length > 0 ? (
-              stats.recentInvoices.map((inv) => (
-                <div key={inv._id} className="p-4 bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800 rounded-2xl flex items-center justify-between hover:border-slate-200 transition-colors">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{inv.invoiceNumber}</span>
-                    <span className="text-[10px] text-slate-400">{inv.customer.name} • {new Date(inv.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className="text-sm font-black text-slate-900 dark:text-white">₹{inv.finalAmount.toLocaleString('en-IN')}</span>
-                    <span className="text-[9px] font-bold px-2 py-0.5 bg-brand-500/10 text-brand-500 rounded-full">{inv.paymentMethod}</span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-400">
-                <span className="text-sm font-semibold">No sales logged today.</span>
-              </div>
-            )}
           </div>
         </div>
       </section>

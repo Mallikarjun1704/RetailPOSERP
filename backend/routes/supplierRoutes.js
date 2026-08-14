@@ -1,5 +1,14 @@
 import express from 'express';
-import { getSuppliers, createSupplier, updateSupplier, deleteSupplier, createPurchaseRecord, getPurchaseRecords } from '../controllers/supplierController.js';
+import { 
+  getSuppliers, 
+  createSupplier, 
+  getSupplierById, 
+  updateSupplier, 
+  deleteSupplier, 
+  createPurchaseRecord, 
+  getPurchaseRecords,
+  recordBillPayment
+} from '../controllers/supplierController.js';
 import { protect, admin } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -12,7 +21,11 @@ router.route('/purchases')
   .post(protect, createPurchaseRecord)
   .get(protect, getPurchaseRecords);
 
+router.route('/purchases/:id/payment')
+  .post(protect, recordBillPayment);
+
 router.route('/:id')
+  .get(protect, getSupplierById)
   .put(protect, updateSupplier)
   .delete(protect, admin, deleteSupplier);
 

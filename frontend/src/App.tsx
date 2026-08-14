@@ -12,7 +12,6 @@ import Suppliers from './pages/Suppliers';
 import Customers from './pages/Customers';
 import Reports from './pages/Reports';
 import Users from './pages/Users';
-import Coupons from './pages/Coupons';
 
 // Shielded Route wrapper to prevent unauthenticated entries
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -50,7 +49,6 @@ const AppLayout: React.FC = () => {
           <Route path="/customers" element={<Customers />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/users" element={<Users />} />
-          <Route path="/coupons" element={<Coupons />} />
           {/* Fallback to dashboard */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
