@@ -59,7 +59,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('user', JSON.stringify(data.data));
       }
     } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Login failed');
+      if (!error.response) {
+        throw new Error('Local server is starting up or unreachable. Please wait 2 seconds and try again.');
+      }
+      throw new Error(error.response?.data?.message || 'Login failed. Please check your username and password.');
     }
   };
 

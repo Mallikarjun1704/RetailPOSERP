@@ -1,31 +1,161 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, utilityProcess } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 
 let mainWindow;
 let backendProcess;
+let isQuitting = false;
+let logStream = null;
+
+// Setup persistent log file in user data directory
+function setupLogging() {
+  try {
+    const userDataPath = app.getPath('userData');
+    if (!fs.existsSync(userDataPath)) {
+      fs.mkdirSync(userDataPath, { recursive: true });
+    }
+    const logFilePath = path.join(userDataPath, 'backend.log');
+    logStream = fs.createWriteStream(logFilePath, { flags: 'a' });
+    log(`[Main]: RetailPOS initialized at ${new Date().toISOString()}`);
+    log(`[Main]: App path: ${app.getAppPath()}, isPackaged: ${app.isPackaged}`);
+    log(`[Main]: Resources path: ${process.resourcesPath}`);
+  } catch (err) {
+    console.error('Failed to setup file logger:', err);
+  }
+}
+
+function log(message) {
+  const line = `[${new Date().toISOString()}] ${message}\n`;
+  console.log(message);
+  if (logStream) {
+    logStream.write(line);
+  }
+}
+
+function logError(message) {
+  const line = `[${new Date().toISOString()}] [ERROR] ${message}\n`;
+  console.error(message);
+  if (logStream) {
+    logStream.write(line);
+  }
+}
+
+function getBackendPath() {
+  if (app.isPackaged) {
+    // 1. Look in app.asar.unpacked/backend/server.js
+    const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'backend', 'server.js');
+    if (fs.existsSync(unpackedPath)) {
+      log(`[Main]: Found backend at unpacked path: ${unpackedPath}`);
+      return unpackedPath;
+    }
+
+    // 2. Look in resources/backend/server.js
+    const resourcePath = path.join(process.resourcesPath, 'backend', 'server.js');
+    if (fs.existsSync(resourcePath)) {
+      log(`[Main]: Found backend at resource path: ${resourcePath}`);
+      return resourcePath;
+    }
+  }
+
+  // 3. Development fallback
+  const devPath = path.join(__dirname, '../backend/server.js');
+  log(`[Main]: Using development backend path: ${devPath}`);
+  return devPath;
+}
 
 function startBackend() {
-  const serverPath = path.join(__dirname, '../backend/server.js');
-  console.log(`Spawning local offline backend at: ${serverPath}`);
+  const serverPath = getBackendPath();
+  const serverDir = path.dirname(serverPath);
+  log(`Spawning local offline backend at: ${serverPath}`);
 
-  // Spawn the Express backend using system node to run in the standard Node.js environment
-  backendProcess = spawn('node', [serverPath], {
-    env: { ...process.env, PORT: 5000, NODE_ENV: app.isPackaged ? 'production' : 'development' },
-    shell: true
-  });
+  const backendEnv = {
+    ...process.env,
+    PORT: '5000',
+    NODE_ENV: app.isPackaged ? 'production' : 'development',
+    USER_DATA_PATH: app.getPath('userData'),
+    MONGODB_URI: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/retailApp'
+  };
 
-  backendProcess.stdout.on('data', (data) => {
-    console.log(`[Backend Log]: ${data.toString().trim()}`);
-  });
+  try {
+    // Strategy 1: Use Electron's native utilityProcess (built-in Node.js runtime)
+    if (utilityProcess && typeof utilityProcess.fork === 'function') {
+      log('[Main]: Starting backend via Electron utilityProcess.fork...');
+      backendProcess = utilityProcess.fork(serverPath, [], {
+        cwd: serverDir,
+        env: backendEnv,
+        stdio: 'pipe'
+      });
 
-  backendProcess.stderr.on('data', (data) => {
-    console.error(`[Backend Error]: ${data.toString().trim()}`);
-  });
+      if (backendProcess.stdout) {
+        backendProcess.stdout.on('data', (data) => {
+          log(`[Backend Log]: ${data.toString().trim()}`);
+        });
+      }
 
-  backendProcess.on('exit', (code, signal) => {
-    console.log(`Backend process terminated with code ${code} and signal ${signal}`);
-  });
+      if (backendProcess.stderr) {
+        backendProcess.stderr.on('data', (data) => {
+          logError(`[Backend Error]: ${data.toString().trim()}`);
+        });
+      }
+
+      backendProcess.on('exit', (code) => {
+        log(`[Main]: Backend utilityProcess exited with code ${code}`);
+        if (!isQuitting && code !== 0) {
+          log('[Main]: Attempting to restart backend process in 3 seconds...');
+          setTimeout(startBackend, 3000);
+        }
+      });
+      return;
+    }
+  } catch (err) {
+    logError(`[Main]: utilityProcess failed: ${err.message}. Falling back to child_process...`);
+  }
+
+  // Strategy 2: Fallback to spawning process.execPath with ELECTRON_RUN_AS_NODE=1
+  try {
+    log('[Main]: Starting backend via process.execPath (ELECTRON_RUN_AS_NODE)...');
+    backendProcess = spawn(process.execPath, [serverPath], {
+      cwd: serverDir,
+      env: {
+        ...backendEnv,
+        ELECTRON_RUN_AS_NODE: '1'
+      },
+      shell: false
+    });
+
+    backendProcess.stdout.on('data', (data) => {
+      log(`[Backend Log]: ${data.toString().trim()}`);
+    });
+
+    backendProcess.stderr.on('data', (data) => {
+      logError(`[Backend Error]: ${data.toString().trim()}`);
+    });
+
+    backendProcess.on('exit', (code, signal) => {
+      log(`[Main]: Backend child_process exited with code ${code} and signal ${signal}`);
+      if (!isQuitting && code !== 0) {
+        log('[Main]: Attempting to restart backend process in 3 seconds...');
+        setTimeout(startBackend, 3000);
+      }
+    });
+  } catch (err) {
+    logError(`[Main]: Failed to spawn backend process: ${err.message}`);
+  }
+}
+
+function stopBackend() {
+  if (backendProcess) {
+    log('[Main]: Terminating offline Express backend child process...');
+    try {
+      if (typeof backendProcess.kill === 'function') {
+        backendProcess.kill();
+      }
+    } catch (err) {
+      logError(`[Main]: Error killing backend process: ${err.message}`);
+    }
+    backendProcess = null;
+  }
 }
 
 function createWindow() {
@@ -53,7 +183,7 @@ function createWindow() {
     // In dev: connect to local Vite dev server
     const loadViteServer = () => {
       mainWindow.loadURL('http://127.0.0.1:5173').catch((err) => {
-        console.log('Vite dev server not ready yet, retrying in 1 second...');
+        log('Vite dev server not ready yet, retrying in 1 second...');
         setTimeout(loadViteServer, 1000);
       });
     };
@@ -63,7 +193,9 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   } else {
     // In prod: load compiled static HTML bundle
-    mainWindow.loadFile(path.join(__dirname, '../frontend/dist/index.html'));
+    const indexPath = path.join(__dirname, '../frontend/dist/index.html');
+    log(`[Main]: Loading frontend from: ${indexPath}`);
+    mainWindow.loadFile(indexPath);
   }
 
   mainWindow.on('closed', () => {
@@ -76,12 +208,17 @@ ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
 
+ipcMain.handle('get-log-path', () => {
+  return path.join(app.getPath('userData'), 'backend.log');
+});
+
 ipcMain.on('print-document', (event, options) => {
-  console.log('print-document request received with options:', options);
+  log(`print-document request received with options: ${JSON.stringify(options)}`);
 });
 
 // Electron bootstrap lifecycle hooks
 app.whenReady().then(() => {
+  setupLogging();
   startBackend();
   createWindow();
 
@@ -99,9 +236,16 @@ app.on('window-all-closed', () => {
   }
 });
 
+app.on('before-quit', () => {
+  isQuitting = true;
+  stopBackend();
+});
+
 app.on('will-quit', () => {
-  if (backendProcess) {
-    console.log('Terminating offline Express backend child process...');
-    backendProcess.kill();
+  isQuitting = true;
+  stopBackend();
+  if (logStream) {
+    logStream.end();
   }
 });
+

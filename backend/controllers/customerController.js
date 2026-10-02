@@ -15,8 +15,41 @@ export const getCustomers = async (req, res) => {
     : {};
 
   try {
-    const customers = await Customer.find(keyword).sort({ createdAt: -1 });
-    res.json({ success: true, data: customers });
+    const customers = await Customer.find(keyword).sort({ createdAt: -1 }).lean();
+    
+    // Aggregate GST metrics for customers from Invoices
+    const customerMobiles = customers.map(c => c.mobile);
+    const invoiceTotals = await Invoice.aggregate([
+      { $match: { 'customer.mobile': { $in: customerMobiles } } },
+      {
+        $group: {
+          _id: '$customer.mobile',
+          totalTaxable: { $sum: '$subtotal' },
+          totalGst: { $sum: '$totalGst' }
+        }
+      }
+    ]);
+
+    const totalsMap = {};
+    invoiceTotals.forEach(item => {
+      const gst = item.totalGst || 0;
+      totalsMap[item._id] = {
+        totalTaxable: Number((item.totalTaxable || 0).toFixed(2)),
+        totalGst: Number(gst.toFixed(2)),
+        totalCgst: Number((gst / 2).toFixed(2)),
+        totalSgst: Number((gst / 2).toFixed(2))
+      };
+    });
+
+    const enrichedCustomers = customers.map(c => ({
+      ...c,
+      totalTaxable: totalsMap[c.mobile]?.totalTaxable || 0,
+      totalGst: totalsMap[c.mobile]?.totalGst || 0,
+      totalCgst: totalsMap[c.mobile]?.totalCgst || 0,
+      totalSgst: totalsMap[c.mobile]?.totalSgst || 0
+    }));
+
+    res.json({ success: true, data: enrichedCustomers });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

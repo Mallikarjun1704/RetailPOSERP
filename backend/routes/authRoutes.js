@@ -1,5 +1,5 @@
 import express from 'express';
-import { register, login, getMe, getUsers, toggleUserStatus } from '../controllers/authController.js';
+import { register, login, getMe, getUsers, toggleUserStatus, updateUser, getAuthStatus, resetAdminPassword } from '../controllers/authController.js';
 import { protect, admin } from '../middleware/auth.js';
 import User from '../models/User.js';
 
@@ -22,10 +22,14 @@ const bootstrapRegister = async (req, res, next) => {
   }
 };
 
+router.get('/status', getAuthStatus);
+router.post('/reset-admin', resetAdminPassword);
 router.post('/register', bootstrapRegister, register);
 router.post('/login', login);
 router.get('/me', protect, getMe);
 router.get('/users', protect, admin, getUsers);
+router.put('/users/:id', protect, admin, updateUser);
 router.put('/users/:id/toggle', protect, admin, toggleUserStatus);
 
 export default router;
+

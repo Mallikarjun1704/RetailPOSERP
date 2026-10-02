@@ -53,10 +53,14 @@
       "installerHeaderIcon": "build/icon.ico",
       "shortcutName": "RetailPOS"
     },
+    "asar": true,
+    "asarUnpack": [
+      "backend/**/*"
+    ],
     "files": [
       "electron/**/*",
       "backend/**/*",
-      "frontend/dist"
+      "frontend/dist/**/*"
     ]
   }
 }

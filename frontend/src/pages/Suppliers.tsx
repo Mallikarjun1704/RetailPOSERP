@@ -214,14 +214,50 @@ const Suppliers: React.FC = () => {
     }
   };
 
+  // SUPPLIER BILL CREATION / EDIT STATE
+  const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
+
   // Open Bill Creation Page
   const startCreateBill = (supplierId?: string) => {
+    setEditingPurchaseId(null);
     const targetSup = supplierId || selectedSupplierId || (suppliers[0]?._id || '');
     setBillSupplierId(targetSup);
     setRestockInvoiceNumber(`BILL-${Date.now().toString().slice(-6)}`);
     setRestockDate(new Date().toISOString().split('T')[0]);
     setRestockItems([]);
     setAmountPaid(0);
+    setViewState('create-bill');
+  };
+
+  // Start Editing an existing Supplier Bill
+  const startEditBill = (bill: PurchaseRecord) => {
+    setEditingPurchaseId(bill._id);
+    const targetSup = typeof bill.supplier === 'object' ? (bill.supplier as any)._id : bill.supplier;
+    setBillSupplierId(targetSup || selectedSupplierId || '');
+    setRestockInvoiceNumber(bill.invoiceNumber);
+    setRestockDate(new Date(bill.purchaseDate).toISOString().split('T')[0]);
+    setAmountPaid(bill.amountPaid || 0);
+
+    const mappedItems = bill.items.map(it => {
+      const prod = typeof it.product === 'object' ? (it.product as any) : null;
+      const prodId: string = prod ? prod._id : (typeof it.product === 'string' ? it.product : (it.product as any)?._id || '');
+      const prodName = prod ? prod.name : 'Product';
+      const modelNumber = prod ? prod.modelNumber : '';
+      const imeiString = it.imeiList ? it.imeiList.join(', ') : '';
+
+      return {
+        product: prodId,
+        productName: prodName,
+        modelNumber,
+        quantity: it.quantity,
+        purchasePrice: it.purchasePrice,
+        gstRate: it.gstRate || 18,
+        hasIMEI: Boolean(it.imeiList && it.imeiList.length > 0),
+        imeiString
+      };
+    });
+
+    setRestockItems(mappedItems);
     setViewState('create-bill');
   };
 
@@ -400,16 +436,30 @@ const Suppliers: React.FC = () => {
     };
 
     try {
-      const { data } = await api.post('/suppliers/purchases', restockPayload);
-      if (data.success) {
-        showSuccess('Supplier Bill saved! Inventory stock & supplier ledger updated.');
-        // Return to supplier profile or directory
-        if (selectedSupplierId) {
-          fetchSupplierProfile(selectedSupplierId);
-          setViewState('profile');
-        } else {
-          fetchSuppliers();
-          setViewState('directory');
+      if (editingPurchaseId) {
+        const { data } = await api.put(`/suppliers/purchases/${editingPurchaseId}`, restockPayload);
+        if (data.success) {
+          showSuccess('Supplier Bill updated! Stock & ledger re-calculated.');
+          setEditingPurchaseId(null);
+          if (selectedSupplierId) {
+            fetchSupplierProfile(selectedSupplierId);
+            setViewState('profile');
+          } else {
+            fetchSuppliers();
+            setViewState('directory');
+          }
+        }
+      } else {
+        const { data } = await api.post('/suppliers/purchases', restockPayload);
+        if (data.success) {
+          showSuccess('Supplier Bill saved! Inventory stock & supplier ledger updated.');
+          if (selectedSupplierId) {
+            fetchSupplierProfile(selectedSupplierId);
+            setViewState('profile');
+          } else {
+            fetchSuppliers();
+            setViewState('directory');
+          }
         }
       }
     } catch (error: any) {
@@ -535,13 +585,22 @@ const Suppliers: React.FC = () => {
           )}
 
           {viewState === 'profile' && isAdmin && (
-            <button
-              onClick={() => startCreateBill(selectedSupplierId || undefined)}
-              className="px-5 py-3.5 bg-brand-500 hover:bg-brand-600 rounded-2xl text-xs font-extrabold uppercase text-white shadow-lg shadow-brand-500/20 active:scale-[0.98] transition-all flex items-center gap-2"
-            >
-              <Receipt size={16} />
-              <span>+ Create Supplier Bill</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => selectedSupplierData && openSupplierModal(selectedSupplierData)}
+                className="px-4 py-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-xs font-extrabold uppercase text-slate-700 dark:text-slate-200 shadow-sm active:scale-[0.98] transition-all flex items-center gap-2"
+              >
+                <Edit size={14} className="text-brand-500" />
+                <span>Edit Supplier</span>
+              </button>
+              <button
+                onClick={() => startCreateBill(selectedSupplierId || undefined)}
+                className="px-5 py-3.5 bg-brand-500 hover:bg-brand-600 rounded-2xl text-xs font-extrabold uppercase text-white shadow-lg shadow-brand-500/20 active:scale-[0.98] transition-all flex items-center gap-2"
+              >
+                <Receipt size={16} />
+                <span>+ Create Supplier Bill</span>
+              </button>
+            </div>
           )}
         </div>
       </header>
@@ -637,7 +696,19 @@ const Suppliers: React.FC = () => {
             {/* Account Details */}
             <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm flex flex-col justify-between">
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Supplier Info</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Supplier Info</span>
+                  {isAdmin && (
+                    <button
+                      onClick={() => openSupplierModal(selectedSupplierData)}
+                      className="text-xs font-bold text-brand-500 hover:text-brand-600 flex items-center gap-1 transition-colors"
+                      title="Edit Supplier"
+                    >
+                      <Edit size={12} />
+                      <span>Edit</span>
+                    </button>
+                  )}
+                </div>
                 <h3 className="text-xl font-black text-slate-900 dark:text-white mt-1">{selectedSupplierData.name}</h3>
                 <p className="text-xs text-slate-500 mt-1">Contact: {selectedSupplierData.contactPerson || 'N/A'}</p>
                 <div className="flex flex-col gap-1 mt-3 text-xs text-slate-600 dark:text-slate-400">
@@ -699,12 +770,13 @@ const Suppliers: React.FC = () => {
                 <tr className="border-b border-slate-200 dark:border-slate-800">
                   <th className="pos-grid-header">Purchase Date</th>
                   <th className="pos-grid-header">Invoice #</th>
-                  <th className="pos-grid-header text-right">Items Inward</th>
+                  <th className="pos-grid-header">Items & Qty</th>
+                  <th className="pos-grid-header text-right">Each Qty Price</th>
                   <th className="pos-grid-header text-right">Total Bill (INR)</th>
                   <th className="pos-grid-header text-right">Amount Paid</th>
                   <th className="pos-grid-header text-right">Balance Due</th>
                   <th className="pos-grid-header text-center">Status</th>
-                  <th className="pos-grid-header text-center">Payment Action</th>
+                  <th className="pos-grid-header text-center">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -717,8 +789,31 @@ const Suppliers: React.FC = () => {
                       <td className="px-4 py-4 text-xs font-bold text-slate-500">
                         {bill.invoiceNumber}
                       </td>
+                      <td className="px-4 py-4 text-xs">
+                        <div className="flex flex-col gap-1 max-w-[220px]">
+                          {bill.items.map((it, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                              <span className="font-semibold truncate mr-2">
+                                {typeof it.product === 'object' && it.product?.name ? it.product.name : 'Product'}
+                              </span>
+                              <span className="font-bold text-slate-500 dark:text-slate-400 shrink-0 text-[11px]">
+                                {it.quantity} {it.quantity === 1 ? 'unit' : 'units'}
+                              </span>
+                            </div>
+                          ))}
+                          <span className="text-[10px] text-slate-400 font-bold border-t border-slate-100 dark:border-slate-800 pt-0.5">
+                            Total: {bill.items.reduce((sum, i) => sum + i.quantity, 0)} units
+                          </span>
+                        </div>
+                      </td>
                       <td className="px-4 py-4 text-right text-xs">
-                        {bill.items.reduce((sum, i) => sum + i.quantity, 0)} units
+                        <div className="flex flex-col gap-1 items-end">
+                          {bill.items.map((it, idx) => (
+                            <span key={idx} className="font-bold text-slate-800 dark:text-slate-200">
+                              ₹{it.purchasePrice.toLocaleString('en-IN')} <span className="text-[10px] text-slate-400 font-normal">/ unit</span>
+                            </span>
+                          ))}
+                        </div>
                       </td>
                       <td className="px-4 py-4 text-right font-black text-xs text-slate-900 dark:text-white">
                         ₹{Math.round(bill.totalAmount).toLocaleString('en-IN')}
@@ -741,22 +836,32 @@ const Suppliers: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-4 py-4 text-center">
-                        {bill.balanceDue > 0 ? (
+                        <div className="flex items-center justify-center gap-2">
                           <button
-                            onClick={() => openPaymentModal(bill)}
-                            className="px-3 py-1.5 bg-brand-500/10 hover:bg-brand-500 text-brand-500 hover:text-white rounded-xl text-xs font-bold transition-all"
+                            onClick={() => startEditBill(bill)}
+                            className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-brand-500 hover:text-white rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 transition-all flex items-center gap-1"
+                            title="Edit Supplier Bill"
                           >
-                            Record Payment
+                            <Edit size={12} />
+                            <span>Edit</span>
                           </button>
-                        ) : (
-                          <span className="text-[10px] text-emerald-500 font-bold">✓ Settled</span>
-                        )}
+                          {bill.balanceDue > 0 ? (
+                            <button
+                              onClick={() => openPaymentModal(bill)}
+                              className="px-2.5 py-1.5 bg-brand-500/10 hover:bg-brand-500 text-brand-500 hover:text-white rounded-xl text-xs font-bold transition-all"
+                            >
+                              Payment
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-emerald-500 font-bold px-1.5">✓ Settled</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={8} className="text-center py-20 text-slate-400 dark:text-slate-600">
+                    <td colSpan={9} className="text-center py-20 text-slate-400 dark:text-slate-600">
                       No purchase bills logged for this supplier yet.
                     </td>
                   </tr>
@@ -778,7 +883,16 @@ const Suppliers: React.FC = () => {
             
             {/* Header Bill Fields */}
             <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm flex flex-col gap-4">
-              <h3 className="font-extrabold text-base mb-2">Supplier Bill Information</h3>
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="font-extrabold text-base">
+                  {editingPurchaseId ? `Edit Supplier Bill: ${restockInvoiceNumber}` : 'Supplier Bill Information'}
+                </h3>
+                {editingPurchaseId && (
+                  <span className="px-3 py-1 bg-brand-500/10 text-brand-500 rounded-full text-[10px] font-bold uppercase">
+                    Editing Bill
+                  </span>
+                )}
+              </div>
               
               <div className="grid grid-cols-3 gap-4">
                 <div className="flex flex-col gap-1">
@@ -926,15 +1040,14 @@ const Suppliers: React.FC = () => {
                         {item.hasIMEI && (
                           <div className="col-span-3 mt-1 flex flex-col gap-1">
                             <label className="text-[9px] font-bold text-cyan-500 uppercase flex items-center gap-1">
-                              <Barcode size={10} /> Incoming Serial / IMEI Numbers (Comma Separated)
+                              <Barcode size={10} /> Incoming Serial / IMEI Numbers (Comma Separated - Optional)
                             </label>
                             <input
                               type="text"
-                              placeholder="e.g. 86904501, 86904502"
+                              placeholder="e.g. 86904501, 86904502 (optional)"
                               value={item.imeiString}
                               onChange={(e) => updateRestockItemField(idx, 'imeiString', e.target.value)}
                               className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-[10px] font-bold outline-none"
-                              required
                             />
                             <span className="text-[9px] text-cyan-600 dark:text-cyan-400 font-bold">
                               Parsed {item.imeiString.split(',').map(i => i.trim()).filter(i => i.length > 0).length} IMEIs.
@@ -998,7 +1111,7 @@ const Suppliers: React.FC = () => {
                 className="w-full py-4 bg-brand-500 hover:bg-brand-600 disabled:bg-slate-200 disabled:dark:bg-slate-800 font-bold text-white text-xs uppercase rounded-2xl shadow-xl shadow-brand-500/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
               >
                 <Receipt size={16} />
-                <span>Save Supplier Bill & Sync Stock</span>
+                <span>{editingPurchaseId ? 'Update Supplier Bill & Sync Stock' : 'Save Supplier Bill & Sync Stock'}</span>
               </button>
             </div>
           </div>

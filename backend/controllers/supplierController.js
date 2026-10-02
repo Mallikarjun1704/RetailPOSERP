@@ -139,10 +139,8 @@ export const createPurchaseRecord = async (req, res) => {
       // 2. Dynamically increment stock in our database
       product.stock += qty;
       if (product.hasIMEI && item.imeiList && item.imeiList.length > 0) {
-        // Append new IMEIs
-        product.imeiList = [...product.imeiList, ...item.imeiList];
-        // Enforce stock consistency with IMEI count
-        product.stock = product.imeiList.length;
+        // Append new IMEIs if provided
+        product.imeiList = [...(product.imeiList || []), ...item.imeiList];
       }
       
       // Update historical purchase price if needed
@@ -196,6 +194,115 @@ export const getPurchaseRecords = async (req, res) => {
       .sort({ createdAt: -1 });
 
     res.json({ success: true, data: purchases });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update / Edit an existing supplier purchase bill
+// @route   PUT /api/suppliers/purchases/:id
+// @access  Private
+export const updatePurchaseRecord = async (req, res) => {
+  const { invoiceNumber, purchaseDate, items, amountPaid } = req.body;
+
+  try {
+    const purchase = await PurchaseRecord.findById(req.params.id);
+    if (!purchase) {
+      return res.status(404).json({ success: false, message: 'Purchase bill not found' });
+    }
+
+    const supplier = await Supplier.findById(purchase.supplier);
+    if (!supplier) {
+      return res.status(404).json({ success: false, message: 'Supplier not found' });
+    }
+
+    // 1. Revert previous stock & balance
+    for (const oldItem of purchase.items) {
+      const prod = await Product.findById(oldItem.product);
+      if (prod) {
+        prod.stock = Math.max(0, prod.stock - oldItem.quantity);
+        if (prod.hasIMEI && oldItem.imeiList && oldItem.imeiList.length > 0) {
+          prod.imeiList = (prod.imeiList || []).filter(im => !oldItem.imeiList.includes(im));
+        }
+        await prod.save();
+      }
+    }
+
+    // Deduct old balance due from supplier
+    supplier.outstandingBalance = Math.max(0, supplier.outstandingBalance - purchase.balanceDue);
+
+    // 2. Process new / updated items
+    let subtotal = 0;
+    let totalGst = 0;
+    const verifiedItems = [];
+
+    for (const item of items) {
+      const product = await Product.findById(item.product);
+      if (!product) {
+        return res.status(404).json({ success: false, message: `Product ${item.product} not found` });
+      }
+
+      const qty = Number(item.quantity);
+      const price = Number(item.purchasePrice);
+      const gstRate = Number(item.gstRate !== undefined ? item.gstRate : (product.gstRate || 18));
+
+      const itemTotal = price * qty;
+      const itemTaxable = itemTotal / (1 + (gstRate / 100));
+      const itemGst = itemTotal - itemTaxable;
+
+      subtotal += itemTaxable;
+      totalGst += itemGst;
+
+      const itemImeis = item.imeiList 
+        ? (Array.isArray(item.imeiList) ? item.imeiList : String(item.imeiList).split(',').map(i => i.trim()).filter(Boolean)) 
+        : [];
+
+      verifiedItems.push({
+        product: product._id,
+        quantity: qty,
+        purchasePrice: price,
+        gstRate,
+        imeiList: itemImeis
+      });
+
+      // Apply new stock
+      product.stock += qty;
+      if (product.hasIMEI && itemImeis.length > 0) {
+        product.imeiList = [...new Set([...(product.imeiList || []), ...itemImeis])];
+      }
+      product.purchasePrice = price;
+      await product.save();
+    }
+
+    const totalAmount = subtotal + totalGst;
+    const paid = amountPaid !== undefined ? Number(amountPaid) : purchase.amountPaid;
+    const balanceDue = Math.max(0, totalAmount - paid);
+
+    let status = 'Unpaid';
+    if (paid >= totalAmount) {
+      status = 'Paid';
+    } else if (paid > 0) {
+      status = 'Partial';
+    }
+
+    // 3. Update purchase document
+    if (invoiceNumber) purchase.invoiceNumber = invoiceNumber;
+    if (purchaseDate) purchase.purchaseDate = purchaseDate;
+    purchase.items = verifiedItems;
+    purchase.subtotal = Number(subtotal.toFixed(2));
+    purchase.totalGst = Number(totalGst.toFixed(2));
+    purchase.totalAmount = Number(totalAmount.toFixed(2));
+    purchase.amountPaid = paid;
+    purchase.balanceDue = Number(balanceDue.toFixed(2));
+    purchase.status = status;
+
+    await purchase.save();
+
+    // 4. Update supplier credit balance
+    supplier.outstandingBalance += purchase.balanceDue;
+    await supplier.save();
+
+    res.json({ success: true, data: purchase, message: 'Supplier bill updated successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

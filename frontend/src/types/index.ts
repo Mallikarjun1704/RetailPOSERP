@@ -49,6 +49,10 @@ export interface Customer {
   loyaltyPoints: number;
   purchaseCount: number;
   totalSpent: number;
+  totalCgst?: number;
+  totalSgst?: number;
+  totalTaxable?: number;
+  totalGst?: number;
 }
 
 export interface Coupon {
@@ -102,6 +106,7 @@ export interface Invoice {
   finalAmount: number;
   paymentMethod: 'Cash' | 'Card' | 'UPI' | 'EMI';
   paymentDetails?: string;
+  giftItem?: string;
   cashier: {
     userId: string;
     name: string;

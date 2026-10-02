@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Lock, User as UserIcon, Laptop, Sparkles, UserPlus } from 'lucide-react';
+import { Lock, User as UserIcon, Sparkles, UserPlus, ShieldCheck, RefreshCw, KeyRound } from 'lucide-react';
 import api from '../utils/api';
 import TMLogo from '../components/TMLogo';
 
@@ -9,15 +9,18 @@ const Login: React.FC = () => {
   const { login, registerUser, user } = useAuth();
   const navigate = useNavigate();
 
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [infoMessage, setInfoMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [serverReady, setServerReady] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   // Bootstrap mode states
   const [isBootstrap, setIsBootstrap] = useState(false);
   const [bootstrapName, setBootstrapName] = useState('');
-  const [bootstrapUsername, setBootstrapUsername] = useState('');
+  const [bootstrapUsername, setBootstrapUsername] = useState('admin');
   const [bootstrapPassword, setBootstrapPassword] = useState('');
 
   useEffect(() => {
@@ -27,48 +30,46 @@ const Login: React.FC = () => {
     }
   }, [user, navigate]);
 
-  useEffect(() => {
-    // Check if database needs an initial Admin user
-    const checkDbStatus = async () => {
-      try {
-        const { data } = await api.get('/auth/users').catch((err) => {
-          if (err.response && err.response.status === 401) {
-            // Unauthorised because no tokens are set, but let's query a special endpoint or count state
-          }
-          return { data: { success: false } };
-        });
-
-        // Let's assume database is blank if auth/users returns failure or is empty
-        // In our server route registration, we can query users count
-        const firstCheck = await api.post('/auth/login', { username: 'test', password: 'pwd' })
-          .catch((err) => {
-            // If db is empty, a specific count trigger can be evaluated or we can just try registering.
-            // We can check if any user exists by calling a health endpoint or a custom check
-            return err.response?.data;
-          });
-      } catch {
-        // Safe fallback
-      }
-    };
-    checkDbStatus();
-
-    // To verify bootstrap dynamically, we check if register endpoint allows public registrations.
-    // Our backend route handles this automatically by looking at user counts.
-    // Let's check via dynamic flag
-    const evalBootstrap = async () => {
-      try {
-        const { data } = await api.get('/auth/users').catch(() => ({ data: { success: false, data: [] } }));
-        if (data && data.success && data.data.length === 0) {
+  // Check backend server & database status via public endpoint
+  const checkBackendStatus = useCallback(async () => {
+    try {
+      const { data } = await api.get('/auth/status', { timeout: 3000 });
+      if (data && data.success) {
+        setServerReady(true);
+        if (data.dbConnected && !data.hasAdmin && data.userCount === 0) {
           setIsBootstrap(true);
         }
-      } catch {
-        setIsBootstrap(true);
+        return true;
+      }
+    } catch {
+      setServerReady(false);
+      return false;
+    }
+    return false;
+  }, []);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+
+    const init = async () => {
+      const ready = await checkBackendStatus();
+      if (!ready) {
+        // Poll every 1.5s until backend comes online
+        interval = setInterval(async () => {
+          const isNowReady = await checkBackendStatus();
+          if (isNowReady && interval) {
+            clearInterval(interval);
+          }
+        }, 1500);
       }
     };
 
-    // We try to trigger bootstrap layout if backend doesn't have users
-    evalBootstrap();
-  }, []);
+    init();
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [checkBackendStatus]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,13 +80,43 @@ const Login: React.FC = () => {
 
     setLoading(true);
     setError('');
+    setInfoMessage('');
+
     try {
-      await login(username, password);
+      // If server is not ready yet, wait up to 3 seconds for it to start
+      if (!serverReady) {
+        const isUp = await checkBackendStatus();
+        if (!isUp) {
+          await new Promise((res) => setTimeout(res, 1200));
+        }
+      }
+
+      await login(username.trim(), password);
       navigate('/');
     } catch (err: any) {
-      setError(err.message || 'Invalid username or password');
+      setError(err.message || 'Login failed. Please verify your credentials.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResetAdmin = async () => {
+    setIsResetting(true);
+    setError('');
+    setInfoMessage('');
+    try {
+      const { data } = await api.post('/auth/reset-admin');
+      if (data && data.success) {
+        setUsername('admin');
+        setPassword('admin123');
+        setInfoMessage('Admin account reset! Username: "admin", Password: "admin123". Click LOGIN to enter.');
+      } else {
+        setError(data?.message || 'Failed to reset admin account.');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Reset failed. Make sure local database is running.');
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -104,13 +135,13 @@ const Login: React.FC = () => {
     setError('');
     try {
       // Register first user (automatically resolves to Admin role)
-      await registerUser(bootstrapName, bootstrapUsername, bootstrapPassword, 'admin');
+      await registerUser(bootstrapName, bootstrapUsername.trim(), bootstrapPassword, 'admin');
 
       // Auto login immediately
-      await login(bootstrapUsername, bootstrapPassword);
+      await login(bootstrapUsername.trim(), bootstrapPassword);
       navigate('/');
     } catch (err: any) {
-      setError(err.message || 'Bootstrapping failed');
+      setError(err.message || 'Initialization failed');
     } finally {
       setLoading(false);
     }
@@ -128,8 +159,22 @@ const Login: React.FC = () => {
         <h2 className="text-2xl font-black text-white tracking-tight">TECH MART SALES & SERVICE</h2>
         <p className="text-xs font-semibold uppercase tracking-widest text-brand-400 mb-6">RetailPOS Offline ERP</p>
 
+        {/* Server status indicator (only shown if still booting) */}
+        {!serverReady && (
+          <div className="w-full mb-4 px-3.5 py-2 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-center gap-2 text-amber-400 text-xs font-medium">
+            <RefreshCw size={13} className="animate-spin" />
+            <span>Connecting to offline local server...</span>
+          </div>
+        )}
+
+        {infoMessage && (
+          <div className="w-full mb-4 px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-400 text-xs text-center font-medium leading-relaxed">
+            {infoMessage}
+          </div>
+        )}
+
         {error && (
-          <div className="w-full mb-4 px-4 py-3 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-400 text-sm text-center font-medium animate-shake">
+          <div className="w-full mb-4 px-4 py-3 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-400 text-xs text-center font-medium animate-shake leading-relaxed">
             {error}
           </div>
         )}
@@ -137,10 +182,10 @@ const Login: React.FC = () => {
         {isBootstrap ? (
           /* BOOTSTRAP REGISTER FORM */
           <form onSubmit={handleBootstrapSubmit} className="w-full flex flex-col gap-4">
-            <div className="px-4 py-2 bg-accent-500/10 border border-accent-500/20 rounded-2xl flex items-center gap-2.5 text-accent-400 mb-2">
+            <div className="px-4 py-2.5 bg-accent-500/10 border border-accent-500/20 rounded-2xl flex items-center gap-2.5 text-accent-400 mb-1">
               <Sparkles size={16} className="shrink-0" />
               <div className="text-xs text-left leading-relaxed">
-                <span className="font-bold">Database Empty</span>. Create the initial system credentials to establish the master Admin account.
+                <span className="font-bold">First Run Setup</span>. Create master Administrator account to initialize your POS system.
               </div>
             </div>
 
@@ -149,7 +194,7 @@ const Login: React.FC = () => {
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="e.g. Mallikarjun"
+                  placeholder="e.g. Administrator"
                   value={bootstrapName}
                   onChange={(e) => setBootstrapName(e.target.value)}
                   className="w-full pl-11 pr-4 py-3.5 bg-slate-900 border border-slate-800 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 rounded-2xl text-sm text-white placeholder-slate-500 outline-none transition-all"
@@ -195,7 +240,7 @@ const Login: React.FC = () => {
               className="mt-2 w-full py-4 bg-accent-600 hover:bg-accent-500 rounded-2xl font-bold text-white shadow-xl shadow-accent-600/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
             >
               <UserPlus size={16} />
-              <span>{loading ? 'Bootstrapping...' : 'Initialize Admin Account'}</span>
+              <span>{loading ? 'INITIALIZING...' : 'INITIALIZE ADMIN ACCOUNT'}</span>
             </button>
 
             <button
@@ -203,7 +248,7 @@ const Login: React.FC = () => {
               onClick={() => setIsBootstrap(false)}
               className="text-xs text-brand-400 hover:underline font-semibold mt-1"
             >
-              Go to Standard Login Screen
+              Back to Standard Login Screen
             </button>
           </form>
         ) : (
@@ -219,6 +264,7 @@ const Login: React.FC = () => {
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full pl-11 pr-4 py-3.5 bg-slate-900 border border-slate-800 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 rounded-2xl text-sm text-white placeholder-slate-500 outline-none transition-all"
                   required
+                  autoFocus
                 />
                 <UserIcon size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
               </div>
@@ -242,18 +288,32 @@ const Login: React.FC = () => {
             <button
               type="submit"
               disabled={loading}
-              className="mt-3 w-full py-4 bg-brand-500 hover:bg-brand-400 rounded-2xl font-bold text-white shadow-xl shadow-brand-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              className="mt-3 w-full py-4 bg-brand-500 hover:bg-brand-400 rounded-2xl font-black tracking-wide text-white shadow-xl shadow-brand-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
             >
-              <span>{loading ? 'Entering Terminal...' : 'Enter Console'}</span>
+              <ShieldCheck size={18} />
+              <span>{loading ? 'LOGGING IN...' : 'LOGIN'}</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setIsBootstrap(true)}
-              className="text-xs text-slate-500 hover:text-slate-400 transition-colors font-semibold mt-1"
-            >
-              First install? Initialize Database
-            </button>
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-800/60">
+              <button
+                type="button"
+                onClick={handleResetAdmin}
+                disabled={isResetting}
+                className="text-xs text-slate-400 hover:text-brand-400 transition-colors font-medium flex items-center gap-1.5"
+                title="Reset default admin user (admin / admin123)"
+              >
+                <KeyRound size={13} />
+                <span>{isResetting ? 'Resetting...' : 'Reset Default Admin'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsBootstrap(true)}
+                className="text-xs text-slate-500 hover:text-slate-400 transition-colors font-medium"
+              >
+                First install?
+              </button>
+            </div>
           </form>
         )}
       </div>

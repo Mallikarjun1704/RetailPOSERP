@@ -123,8 +123,8 @@ const POS: React.FC = () => {
         discount: 0,
         gstRate: product.gstRate,
         hasIMEI: product.hasIMEI,
-        imeiList: product.imeiList,
-        imei: product.hasIMEI ? product.imeiList[0] || '' : '' // Select first available by default
+        imeiList: product.imeiList || [],
+        imei: (product.hasIMEI && product.imeiList && product.imeiList.length > 0) ? product.imeiList[0] || '' : '' // Select first available by default if present
       };
 
       setCart([...cart, newCartItem]);
@@ -345,11 +345,11 @@ const POS: React.FC = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800">
-                  <th className="pos-grid-header">Item Description</th>
+                  <th className="pos-grid-header w-14 text-center">Sl. No.</th>
+                  <th className="pos-grid-header">Product / Details</th>
                   <th className="pos-grid-header text-center">Qty</th>
-                  <th className="pos-grid-header text-right">Selling Price</th>
-                  <th className="pos-grid-header text-right">Item Tax</th>
-                  <th className="pos-grid-header text-right">Total Price</th>
+                  <th className="pos-grid-header text-right">Price per unit</th>
+                  <th className="pos-grid-header text-right">Total Amount</th>
                   <th className="pos-grid-header text-center">Action</th>
                 </tr>
               </thead>
@@ -357,14 +357,19 @@ const POS: React.FC = () => {
                 {cart.length > 0 ? (
                   cart.map((item, idx) => (
                     <tr key={idx} className="pos-grid-row">
-                      {/* Name, SKU, IMEI selection */}
+                      {/* 1. Sl. No. */}
+                      <td className="px-3 py-4 text-center text-xs font-bold text-slate-500 dark:text-slate-400">
+                        {idx + 1}
+                      </td>
+
+                      {/* 2. Product / Details */}
                       <td className="px-4 py-4 max-w-[280px]">
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-sm font-semibold text-slate-900 dark:text-white">{item.brandName} - {item.name}</span>
+                          <span className="text-sm font-semibold text-slate-900 dark:text-white">{item.brandName ? `${item.brandName} - ` : ''}{item.name}</span>
                           <span className="text-[10px] text-slate-400 font-bold uppercase">SKU: {item.sku}</span>
                           
                           {/* IMEI tracker dropdown for mobile products */}
-                          {item.hasIMEI && (
+                          {item.hasIMEI && item.imeiList && item.imeiList.length > 0 && (
                             <div className="mt-2 flex items-center gap-1.5">
                               <span className="text-[9px] font-bold uppercase text-cyan-500 bg-cyan-500/10 px-2 py-0.5 rounded-full shrink-0">IMEI:</span>
                               <div className="relative inline-block">
@@ -384,13 +389,12 @@ const POS: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Quantity adjusts */}
+                      {/* 3. Quantity */}
                       <td className="px-4 py-4 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <button 
                             onClick={() => updateQuantity(idx, -1)} 
                             className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500"
-                            disabled={item.hasIMEI} // Quantities are 1-per-serial in retail rules
                           >
                             <Minus size={12} />
                           </button>
@@ -398,14 +402,13 @@ const POS: React.FC = () => {
                           <button 
                             onClick={() => updateQuantity(idx, 1)} 
                             className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500"
-                            disabled={item.hasIMEI}
                           >
                             <Plus size={12} />
                           </button>
                         </div>
                       </td>
 
-                      {/* Selling price - EDITABLE */}
+                      {/* 4. Price per unit - EDITABLE */}
                       <td className="px-4 py-4 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <span className="text-xs font-bold text-slate-400">₹</span>
@@ -419,20 +422,12 @@ const POS: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Line GST */}
-                      <td className="px-4 py-4 text-right">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{item.gstRate}%</span>
-                          <span className="text-[10px] text-slate-400">CGST/SGST split</span>
-                        </div>
-                      </td>
-
-                      {/* Line final */}
+                      {/* 5. Total Amount */}
                       <td className="px-4 py-4 text-right">
                         <span className="text-sm font-black text-slate-900 dark:text-white">₹{((item.sellingPrice - item.discount) * item.quantity).toLocaleString('en-IN')}</span>
                       </td>
 
-                      {/* Deletes */}
+                      {/* Action: Delete */}
                       <td className="px-4 py-4 text-center">
                         <button 
                           onClick={() => deleteFromCart(idx)} 
@@ -563,8 +558,12 @@ const POS: React.FC = () => {
               <span className="font-semibold text-slate-800 dark:text-slate-200">₹{totals.subtotal.toLocaleString('en-IN')}</span>
             </div>
             <div className="flex justify-between">
-              <span>Tax (GST Breakdown):</span>
-              <span className="font-semibold text-slate-800 dark:text-slate-200">₹{totals.gst.toLocaleString('en-IN')}</span>
+              <span>CGST (9%):</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">₹{(totals.gst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>SGST (9%):</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">₹{(totals.gst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             {totals.discounts > 0 && (
               <div className="flex justify-between text-rose-500 font-bold">
@@ -615,7 +614,19 @@ const POS: React.FC = () => {
                 <span className="font-bold text-slate-800 dark:text-slate-200">{invoiceSuccess.customer.name}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Grand Total:</span>
+                <span className="text-slate-400">Taxable Subtotal:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">₹{invoiceSuccess.subtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">CGST (9%):</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">₹{(invoiceSuccess.totalGst / 2).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">SGST (9%):</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">₹{(invoiceSuccess.totalGst / 2).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Total Amount:</span>
                 <span className="font-bold text-slate-800 dark:text-slate-200">₹{invoiceSuccess.finalAmount.toLocaleString('en-IN')}.00</span>
               </div>
               <div className="flex justify-between">

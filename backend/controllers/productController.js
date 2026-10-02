@@ -105,7 +105,7 @@ export const createProduct = async (req, res) => {
       purchasePrice,
       sellingPrice: sellingPrice !== undefined && sellingPrice !== null ? sellingPrice : purchasePrice,
       gstRate,
-      stock: hasIMEI ? (imeiList ? imeiList.length : 0) : (stock || 0),
+      stock: (imeiList && imeiList.length > 0) ? imeiList.length : (stock || 0),
       lowStockThreshold: lowStockThreshold || 5,
       hasIMEI: hasIMEI || false,
       imeiList: hasIMEI ? (imeiList || []) : [],
@@ -170,8 +170,16 @@ export const updateProduct = async (req, res) => {
     }
 
     if (product.hasIMEI) {
-      product.imeiList = imeiList || product.imeiList;
-      product.stock = product.imeiList.length;
+      if (imeiList !== undefined) {
+        product.imeiList = imeiList;
+        if (imeiList.length > 0) {
+          product.stock = imeiList.length;
+        } else if (stock !== undefined) {
+          product.stock = stock;
+        }
+      } else if (stock !== undefined) {
+        product.stock = stock;
+      }
     } else {
       product.stock = stock !== undefined ? stock : product.stock;
       product.imeiList = [];

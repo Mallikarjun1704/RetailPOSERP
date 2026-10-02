@@ -7,6 +7,7 @@ import {
   deleteSupplier, 
   createPurchaseRecord, 
   getPurchaseRecords,
+  updatePurchaseRecord,
   recordBillPayment
 } from '../controllers/supplierController.js';
 import { protect, admin } from '../middleware/auth.js';
@@ -20,6 +21,9 @@ router.route('/')
 router.route('/purchases')
   .post(protect, createPurchaseRecord)
   .get(protect, getPurchaseRecords);
+
+router.route('/purchases/:id')
+  .put(protect, updatePurchaseRecord);
 
 router.route('/purchases/:id/payment')
   .post(protect, recordBillPayment);
