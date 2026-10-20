@@ -101,7 +101,7 @@ export const createProduct = async (req, res) => {
       category,
       brand,
       description,
-      mrp: mrp !== undefined && mrp !== null ? mrp : purchasePrice,
+      mrp: mrp !== undefined && mrp !== null ? mrp : (sellingPrice !== undefined && sellingPrice !== null ? sellingPrice : purchasePrice),
       purchasePrice,
       sellingPrice: sellingPrice !== undefined && sellingPrice !== null ? sellingPrice : purchasePrice,
       gstRate,

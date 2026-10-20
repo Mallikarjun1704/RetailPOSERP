@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
 import { DashboardStats } from '../types';
+import InventoryModal from '../components/InventoryModal';
 import { 
   TrendingUp, 
   AlertCircle, 
@@ -9,7 +10,9 @@ import {
   PackageCheck, 
   Clock, 
   CalendarDays,
-  Percent
+  Percent,
+  Boxes,
+  ArrowUpRight
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -26,6 +29,7 @@ const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false);
 
   const fetchDashboardData = async () => {
     try {
@@ -104,31 +108,69 @@ const Dashboard: React.FC = () => {
       desc: "All-time net cumulative earnings",
       icon: PackageCheck,
       color: "bg-purple-500 text-white shadow-purple-500/20"
+    },
+    {
+      title: "Total Inventory",
+      value: stats?.totalProducts !== undefined ? `${stats.totalProducts} Items` : 'View Stock',
+      desc: stats?.totalStock !== undefined ? `${stats.totalStock.toLocaleString('en-IN')} units in stock • Click to view` : 'Click to inspect stock table',
+      icon: Boxes,
+      color: "bg-gradient-to-br from-violet-600 to-indigo-700 text-white shadow-indigo-600/25",
+      isInteractive: true,
+      badgeText: "View Table ↗",
+      onClick: () => setIsInventoryModalOpen(true)
     }
   ];
 
   return (
     <div className="flex-1 p-8 overflow-y-auto bg-slate-50 dark:bg-slate-950 h-screen transition-colors duration-200">
       {/* Upper header controls */}
-      <header className="flex justify-between items-center mb-8">
+      <header className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-sans">Dashboard</h2>
           <p className="text-slate-500 text-sm">Real-time telemetry and retail performance metrics.</p>
         </div>
         
-        {stats && stats.lowStockAlerts > 0 && (
-          <div className="px-4 py-2.5 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-2 text-rose-500 animate-pulse">
-            <AlertCircle size={16} />
-            <span className="text-xs font-bold uppercase tracking-wider">{stats.lowStockAlerts} Low Stock Warnings Active</span>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {stats && stats.lowStockAlerts > 0 && (
+            <button
+              onClick={() => setIsInventoryModalOpen(true)}
+              className="px-4 py-2.5 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-2 text-rose-500 hover:bg-rose-500/20 active:scale-95 transition-all animate-pulse"
+              title="Click to view low stock items"
+            >
+              <AlertCircle size={16} />
+              <span className="text-xs font-bold uppercase tracking-wider">{stats.lowStockAlerts} Low Stock Warnings</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => setIsInventoryModalOpen(true)}
+            className="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 active:scale-95 text-white text-xs font-extrabold rounded-2xl flex items-center gap-2 shadow-lg shadow-brand-500/20 transition-all"
+          >
+            <Boxes size={16} />
+            <span>Inventory Stock Table</span>
+          </button>
+        </div>
       </header>
 
       {/* KPI Cards Grid */}
-      <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-6 mb-8">
-        {kpis.map((kpi, idx) => (
-          <div key={idx} className="p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm hover:shadow-md transition-shadow duration-200 flex items-center justify-between">
-            <div className="flex flex-col gap-1">
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 gap-5 mb-8">
+        {kpis.map((kpi: any, idx) => (
+          <div 
+            key={idx} 
+            onClick={kpi.onClick}
+            className={`p-6 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl shadow-sm transition-all duration-200 flex items-center justify-between relative overflow-hidden ${
+              kpi.isInteractive 
+                ? 'cursor-pointer hover:shadow-lg hover:border-brand-500/60 hover:-translate-y-0.5 group ring-1 ring-brand-500/20' 
+                : 'hover:shadow-md'
+            }`}
+          >
+            {kpi.isInteractive && (
+              <div className="absolute top-2 right-3 flex items-center gap-1 text-[10px] font-black uppercase text-brand-600 dark:text-brand-400 group-hover:translate-x-0.5 transition-transform">
+                <span>View</span>
+                <ArrowUpRight size={12} />
+              </div>
+            )}
+            <div className="flex flex-col gap-1 pr-2">
               <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{kpi.title}</span>
               <span className="text-xl font-black text-slate-950 dark:text-white font-sans">{kpi.value}</span>
               <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">{kpi.desc}</span>
@@ -183,8 +225,15 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* Inventory Modal Popup */}
+      <InventoryModal
+        isOpen={isInventoryModalOpen}
+        onClose={() => setIsInventoryModalOpen(false)}
+      />
     </div>
   );
 };
 
 export default Dashboard;
+

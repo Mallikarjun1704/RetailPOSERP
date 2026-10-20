@@ -38,7 +38,7 @@ const productSchema = new mongoose.Schema({
   },
   mrp: {
     type: Number,
-    required: [true, 'MRP is required'],
+    required: false,
     min: [0, 'MRP cannot be negative']
   },
   purchasePrice: {

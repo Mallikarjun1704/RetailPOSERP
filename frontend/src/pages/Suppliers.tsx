@@ -90,6 +90,7 @@ const Suppliers: React.FC = () => {
   const [newItemCategory, setNewItemCategory] = useState('');
   const [newItemBrand, setNewItemBrand] = useState('');
   const [newItemPurchasePrice, setNewItemPurchasePrice] = useState<number | ''>('');
+  const [newItemSellingPrice, setNewItemSellingPrice] = useState<number | ''>('');
   const [newItemGstRate, setNewItemGstRate] = useState<number>(18);
   const [newItemHasIMEI, setNewItemHasIMEI] = useState(false);
 
@@ -103,6 +104,7 @@ const Suppliers: React.FC = () => {
     modelNumber?: string;
     quantity: number;
     purchasePrice: number;
+    sellingPrice: number;
     gstRate: number;
     hasIMEI: boolean;
     imeiString: string;
@@ -245,12 +247,21 @@ const Suppliers: React.FC = () => {
       const modelNumber = prod ? prod.modelNumber : '';
       const imeiString = it.imeiList ? it.imeiList.join(', ') : '';
 
+      const itemSellingPrice = (it as any).sellingPrice;
+      const productSellingPrice = prod?.sellingPrice;
+      const effectiveSellingPrice = (itemSellingPrice !== undefined && itemSellingPrice !== null && Number(itemSellingPrice) > 0)
+        ? Number(itemSellingPrice)
+        : (productSellingPrice !== undefined && productSellingPrice !== null && Number(productSellingPrice) > 0)
+          ? Number(productSellingPrice)
+          : Number(it.purchasePrice || 0);
+
       return {
         product: prodId,
         productName: prodName,
         modelNumber,
         quantity: it.quantity,
         purchasePrice: it.purchasePrice,
+        sellingPrice: effectiveSellingPrice,
         gstRate: it.gstRate || 18,
         hasIMEI: Boolean(it.imeiList && it.imeiList.length > 0),
         imeiString
@@ -266,12 +277,19 @@ const Suppliers: React.FC = () => {
     const exists = restockItems.some(i => i.product === product._id);
     if (exists) return; // avoid duplicates in list
 
+    const sPrice = (product.sellingPrice !== undefined && product.sellingPrice !== null && Number(product.sellingPrice) > 0)
+      ? Number(product.sellingPrice)
+      : (product.mrp && Number(product.mrp) > 0)
+        ? Number(product.mrp)
+        : Number(product.purchasePrice || 0);
+
     setRestockItems([...restockItems, {
       product: product._id,
       productName: product.name,
       modelNumber: product.modelNumber,
       quantity: 1,
-      purchasePrice: product.purchasePrice,
+      purchasePrice: product.purchasePrice || 0,
+      sellingPrice: sPrice,
       gstRate: product.gstRate,
       hasIMEI: product.hasIMEI,
       imeiString: ''
@@ -299,6 +317,7 @@ const Suppliers: React.FC = () => {
     setNewItemCategory(categories[0]?._id || '');
     setNewItemBrand(brands[0]?._id || '');
     setNewItemPurchasePrice('');
+    setNewItemSellingPrice('');
     setNewItemGstRate(18);
     setNewItemHasIMEI(false);
     setNewItemModal(true);
@@ -307,20 +326,21 @@ const Suppliers: React.FC = () => {
   // Create New Product from Supplier Bill Popup
   const handleCreateNewItemSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newItemName || !newItemCategory || !newItemBrand || !newItemPurchasePrice) {
+    if (!newItemName || !newItemCategory || !newItemBrand || newItemPurchasePrice === '' || newItemSellingPrice === '') {
       showError('Please fill out all required item fields.');
       return;
     }
 
-    const price = Number(newItemPurchasePrice);
+    const purchasePrice = Number(newItemPurchasePrice);
+    const sellingPrice = Number(newItemSellingPrice);
     const payload = {
       name: newItemName,
       modelNumber: newItemModelNumber,
       category: newItemCategory,
       brand: newItemBrand,
-      purchasePrice: price,
-      mrp: price, // price restriction: MRP defaults to purchase price
-      sellingPrice: price,
+      purchasePrice,
+      sellingPrice,
+      mrp: sellingPrice,
       gstRate: newItemGstRate,
       hasIMEI: newItemHasIMEI,
       stock: 0
@@ -429,6 +449,7 @@ const Suppliers: React.FC = () => {
           product: item.product,
           quantity: Math.max(1, Number(item.quantity || 1)),
           purchasePrice: Number(item.purchasePrice || 0),
+          sellingPrice: (item.sellingPrice !== undefined && item.sellingPrice !== null && Number(item.sellingPrice) > 0) ? Number(item.sellingPrice) : (Number(item.purchasePrice) || 0),
           gstRate: Number(item.gstRate || 0),
           imeiList
         };
@@ -1000,7 +1021,7 @@ const Suppliers: React.FC = () => {
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {/* Direct Inventory Entry (Qty) */}
                         <div className="flex flex-col gap-1">
                           <label className="text-[9px] font-bold text-slate-400 uppercase">Direct Inventory Qty*</label>
@@ -1014,7 +1035,7 @@ const Suppliers: React.FC = () => {
                           />
                         </div>
 
-                        {/* PRICE RESTRICTION: Purchase Price Only (GST Inclusive) */}
+                        {/* Purchase Price (GST Inclusive) */}
                         <div className="flex flex-col gap-1">
                           <label className="text-[9px] font-bold text-slate-400 uppercase">Purchase Price (GST Incl.)*</label>
                           <input
@@ -1023,6 +1044,20 @@ const Suppliers: React.FC = () => {
                             onChange={(e) => updateRestockItemField(idx, 'purchasePrice', Number(e.target.value))}
                             className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none font-bold"
                             required
+                            min={0}
+                          />
+                        </div>
+
+                        {/* Selling Price */}
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[9px] font-bold text-brand-500 uppercase">Selling Price (₹)*</label>
+                          <input
+                            type="number"
+                            value={item.sellingPrice}
+                            onChange={(e) => updateRestockItemField(idx, 'sellingPrice', Number(e.target.value))}
+                            className="px-3 py-2 bg-white dark:bg-slate-900 border border-brand-200 dark:border-brand-800/60 rounded-xl text-xs outline-none font-bold text-brand-600 dark:text-brand-400"
+                            required
+                            min={0}
                           />
                         </div>
 
@@ -1038,7 +1073,7 @@ const Suppliers: React.FC = () => {
                         </div>
 
                         {item.hasIMEI && (
-                          <div className="col-span-3 mt-1 flex flex-col gap-1">
+                          <div className="col-span-2 md:col-span-4 mt-1 flex flex-col gap-1">
                             <label className="text-[9px] font-bold text-cyan-500 uppercase flex items-center gap-1">
                               <Barcode size={10} /> Incoming Serial / IMEI Numbers (Comma Separated - Optional)
                             </label>
@@ -1221,7 +1256,7 @@ const Suppliers: React.FC = () => {
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <form 
             onSubmit={handleCreateNewItemSubmit}
-            className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 flex flex-col gap-4 text-slate-800 dark:text-slate-200 animate-scaleUp"
+            className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 flex flex-col gap-4 text-slate-800 dark:text-slate-200 animate-scaleUp"
           >
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
@@ -1229,7 +1264,7 @@ const Suppliers: React.FC = () => {
                 Add New Item / Model
               </h3>
               <button 
-                type="button"
+                type="button" 
                 onClick={() => setNewItemModal(false)}
                 className="text-slate-400 hover:text-slate-600"
               >
@@ -1289,10 +1324,9 @@ const Suppliers: React.FC = () => {
                 </div>
               </div>
 
-              {/* PRICE RESTRICTION: Purchase Price Only Required & Displayed */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold uppercase text-brand-500">Purchase Price (INR)*</label>
+                  <label className="text-[10px] font-bold uppercase text-brand-500">Purchase Price (₹)*</label>
                   <input
                     type="number"
                     placeholder="e.g. 75000"
@@ -1300,6 +1334,20 @@ const Suppliers: React.FC = () => {
                     onChange={(e) => setNewItemPurchasePrice(e.target.value === '' ? '' : Number(e.target.value))}
                     className="px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none font-bold"
                     required
+                    min={0}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold uppercase text-brand-500">Selling Price (₹)*</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 84999"
+                    value={newItemSellingPrice}
+                    onChange={(e) => setNewItemSellingPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none font-bold"
+                    required
+                    min={0}
                   />
                 </div>
 

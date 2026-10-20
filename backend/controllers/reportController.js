@@ -79,6 +79,13 @@ export const getDashboardStats = async (req, res) => {
       $expr: { $lte: ['$stock', '$lowStockThreshold'] }
     });
 
+    // 5b. Total Products & Stock
+    const totalProducts = await Product.countDocuments({});
+    const stockAgg = await Product.aggregate([
+      { $group: { _id: null, totalStock: { $sum: '$stock' } } }
+    ]);
+    const totalStock = stockAgg.length > 0 ? stockAgg[0].totalStock : 0;
+
     // 6. Recent invoices (last 5)
     const recentInvoices = await Invoice.find({})
       .sort({ createdAt: -1 })
@@ -95,6 +102,8 @@ export const getDashboardStats = async (req, res) => {
         totalSales: Math.round(totalSales),
         totalProfit: Math.round(totalProfit),
         lowStockAlerts,
+        totalProducts,
+        totalStock,
         recentInvoices
       }
     });

@@ -31,6 +31,10 @@ const purchaseRecordSchema = new mongoose.Schema({
       required: true,
       min: [0, 'Purchase price cannot be negative']
     },
+    sellingPrice: {
+      type: Number,
+      min: [0, 'Selling price cannot be negative']
+    },
     gstRate: {
       type: Number,
       default: 18

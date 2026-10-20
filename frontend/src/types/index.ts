@@ -131,6 +131,7 @@ export interface PurchaseItem {
   product: string;
   quantity: number;
   purchasePrice: number;
+  sellingPrice?: number;
   gstRate: number;
   imeiList?: string[];
 }
@@ -144,6 +145,7 @@ export interface PurchaseRecord {
     product: Product;
     quantity: number;
     purchasePrice: number;
+    sellingPrice?: number;
     gstRate: number;
     imeiList: string[];
   }[];
@@ -165,5 +167,7 @@ export interface DashboardStats {
   totalSales: number;
   totalProfit: number;
   lowStockAlerts: number;
+  totalProducts?: number;
+  totalStock?: number;
   recentInvoices: Invoice[];
 }

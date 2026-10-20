@@ -128,10 +128,15 @@ export const createPurchaseRecord = async (req, res) => {
       subtotal += itemTaxable;
       totalGst += itemGst;
 
+      const sPrice = (item.sellingPrice !== undefined && item.sellingPrice !== null && item.sellingPrice !== '' && !isNaN(Number(item.sellingPrice)) && Number(item.sellingPrice) > 0)
+        ? Number(item.sellingPrice)
+        : (product.sellingPrice || price);
+
       verifiedItems.push({
         product: product._id,
         quantity: qty,
         purchasePrice: price,
+        sellingPrice: sPrice,
         gstRate,
         imeiList: item.imeiList || []
       });
@@ -143,8 +148,14 @@ export const createPurchaseRecord = async (req, res) => {
         product.imeiList = [...(product.imeiList || []), ...item.imeiList];
       }
       
-      // Update historical purchase price if needed
+      // Update historical purchase price & selling price if provided
       product.purchasePrice = price;
+      if (sPrice !== undefined && sPrice > 0) {
+        product.sellingPrice = sPrice;
+        if (!product.mrp || product.mrp < sPrice) {
+          product.mrp = sPrice;
+        }
+      }
       await product.save();
     }
 
@@ -190,7 +201,7 @@ export const getPurchaseRecords = async (req, res) => {
   try {
     const purchases = await PurchaseRecord.find({})
       .populate('supplier', 'name contactPerson mobile')
-      .populate('items.product', 'name sku modelNumber')
+      .populate('items.product', 'name sku modelNumber purchasePrice sellingPrice')
       .sort({ createdAt: -1 });
 
     res.json({ success: true, data: purchases });
@@ -257,10 +268,15 @@ export const updatePurchaseRecord = async (req, res) => {
         ? (Array.isArray(item.imeiList) ? item.imeiList : String(item.imeiList).split(',').map(i => i.trim()).filter(Boolean)) 
         : [];
 
+      const sPrice = (item.sellingPrice !== undefined && item.sellingPrice !== null && item.sellingPrice !== '' && !isNaN(Number(item.sellingPrice)) && Number(item.sellingPrice) > 0)
+        ? Number(item.sellingPrice)
+        : (product.sellingPrice || price);
+
       verifiedItems.push({
         product: product._id,
         quantity: qty,
         purchasePrice: price,
+        sellingPrice: sPrice,
         gstRate,
         imeiList: itemImeis
       });
@@ -271,6 +287,12 @@ export const updatePurchaseRecord = async (req, res) => {
         product.imeiList = [...new Set([...(product.imeiList || []), ...itemImeis])];
       }
       product.purchasePrice = price;
+      if (sPrice !== undefined && sPrice > 0) {
+        product.sellingPrice = sPrice;
+        if (!product.mrp || product.mrp < sPrice) {
+          product.mrp = sPrice;
+        }
+      }
       await product.save();
     }
 
@@ -319,7 +341,7 @@ export const getSupplierById = async (req, res) => {
     }
 
     const purchases = await PurchaseRecord.find({ supplier: supplier._id })
-      .populate('items.product', 'name sku modelNumber')
+      .populate('items.product', 'name sku modelNumber purchasePrice sellingPrice mrp')
       .sort({ createdAt: -1 });
 
     res.json({

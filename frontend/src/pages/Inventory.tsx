@@ -198,9 +198,9 @@ const Inventory: React.FC = () => {
       category,
       brand,
       description: description.trim(),
-      mrp: Number(mrp) || 0,
+      mrp: Number(sellingPrice) || Number(mrp) || Number(purchasePrice) || 0,
       purchasePrice: Number(purchasePrice) || 0,
-      sellingPrice: Number(sellingPrice) || Number(mrp) || 0,
+      sellingPrice: Number(sellingPrice) || 0,
       gstRate: Number(gstRate) || 18,
       stock: hasIMEI ? imeiList.length : Number(stock) || 0,
       lowStockThreshold: Number(lowStockThreshold) || 5,
@@ -806,18 +806,7 @@ const Inventory: React.FC = () => {
               </div>
 
               {/* Price Calculations */}
-              <div className="p-4 bg-slate-50 dark:bg-slate-950/60 rounded-2xl grid grid-cols-3 gap-3 col-span-2 border border-slate-200/40 dark:border-slate-800">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">MRP (₹)*</label>
-                  <input
-                    type="number"
-                    value={mrp}
-                    onChange={(e) => setMrp(Number(e.target.value))}
-                    className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:border-brand-500 text-slate-900 dark:text-white"
-                    required
-                    min={0}
-                  />
-                </div>
+              <div className="p-4 bg-slate-50 dark:bg-slate-950/60 rounded-2xl grid grid-cols-2 gap-3 col-span-2 border border-slate-200/40 dark:border-slate-800">
                 <div className="flex flex-col gap-1">
                   <label className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Selling Price (₹)*</label>
                   <input
@@ -825,6 +814,7 @@ const Inventory: React.FC = () => {
                     value={sellingPrice}
                     onChange={(e) => setSellingPrice(Number(e.target.value))}
                     className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:border-brand-500 text-slate-900 dark:text-white"
+                    required
                     min={0}
                   />
                 </div>
